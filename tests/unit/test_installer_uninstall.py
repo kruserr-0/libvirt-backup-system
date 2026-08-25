@@ -102,6 +102,18 @@ def test_uninstall_returns_nonzero_when_opt_rmtree_fails(tmp_path: Path, monkeyp
     assert opt_dir.exists()
 
 
+def test_uninstall_preserves_git_repository_at_opt_path(tmp_path: Path, capsys) -> None:
+    opt_dir = tmp_path / "opt/libvirt-backup-system"
+    (opt_dir / ".git").mkdir(parents=True)
+    source_file = opt_dir / "libvirt_backup_system/cli.py"
+    source_file.parent.mkdir()
+    source_file.write_text("# checkout source\n", encoding="utf-8")
+
+    assert uninstall(str(tmp_path)) == 0
+    assert source_file.read_text(encoding="utf-8") == "# checkout source\n"
+    assert "preserved git repository" in capsys.readouterr().out
+
+
 def test_uninstall_returns_nonzero_when_purge_rmtree_fails(tmp_path: Path, monkeypatch, capsys) -> None:
     state_dir = tmp_path / "var/lib/libvirt-backup-system"
     state_dir.mkdir(parents=True)

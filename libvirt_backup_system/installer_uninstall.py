@@ -49,12 +49,15 @@ def remove_installed_files(root: Path) -> bool:
     ok = remove_fish_completion(root) and ok
     opt_dir = prefixed("/opt/libvirt-backup-system", root)
     if opt_dir.exists():
-        try:
-            shutil.rmtree(opt_dir)
-            event("info", "removed directory", path=str(opt_dir))
-        except OSError as exc:
-            event("error", "failed to remove directory", path=str(opt_dir), error=str(exc))
-            ok = False
+        if (opt_dir / ".git").exists():
+            event("info", "preserved git repository", path=str(opt_dir))
+        else:
+            try:
+                shutil.rmtree(opt_dir)
+                event("info", "removed directory", path=str(opt_dir))
+            except OSError as exc:
+                event("error", "failed to remove directory", path=str(opt_dir), error=str(exc))
+                ok = False
     return ok
 
 

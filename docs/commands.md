@@ -98,12 +98,13 @@ running it where untrusted users can inspect process arguments.
 
 ## `uninstall`
 
-Removes installed program files and systemd units. Config, state, logs, the
-kopia password file, and the on-disk repo are preserved by default. The
-purge flags only remove config, state, and logs; uninstall never removes the
-Kopia password file or repo. If `KOPIA_PASSWORD_FILE` is configured inside
-any purged config, state, or log path, uninstall preserves that file and the
-parent directories needed to keep it in place.
+Removes installed program files and systemd units. A Git checkout at
+`/opt/libvirt-backup-system` is preserved. Config, state, logs, the kopia
+password file, and the on-disk repo are preserved by default. The purge flags
+only remove config, state, and logs; uninstall never removes the Kopia
+password file or repo. If `KOPIA_PASSWORD_FILE` is configured inside any
+purged config, state, or log path, uninstall preserves that file and the parent
+directories needed to keep it in place.
 
 ```sh
 sudo libvirt-backup-system uninstall

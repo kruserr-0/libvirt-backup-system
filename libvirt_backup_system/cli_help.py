@@ -50,7 +50,8 @@ Common workflows:
     sudo libvirt-backup-system temp-restore remove <VM_NAME>-temp-<TIMESTAMP>
 
 Run ``libvirt-backup-system <subcommand> --help`` for the full reference on any
-subcommand. The ``restore`` help in particular documents the overwrite-vs-
+subcommand. At the top level, no argument, ``help``, and ``?`` are aliases for
+``--help``. The ``restore`` help in particular documents the overwrite-vs-
 turnkey decision, the staging directory layout, and the safety guarantees."""
 
 
@@ -108,10 +109,11 @@ each node keeps its own (falling back to /etc/machine-id).
 
 UNINSTALL_HELP = "Remove installed files. Config/state/logs/backups are kept unless --purge-* is passed."
 UNINSTALL_DESCRIPTION = """\
-Disable timers, stop services, and remove the installed wrapper, opt
-directory, systemd unit files, and fish completion script. Config, state,
-logs, and on-disk backups are preserved by default so an accidental uninstall
-does not destroy data; use the --purge-* flags to remove them explicitly.
+Disable timers, stop services, and remove the installed wrapper, opt package
+copy, systemd unit files, and fish completion script. If the opt path is itself
+a Git checkout, the checkout is preserved. Config, state, logs, and on-disk
+backups are preserved by default so an accidental uninstall does not destroy
+data; use the --purge-* flags to remove them explicitly.
 
 The on-disk kopia repo under BACKUP_PATH is never touched by uninstall; that
 has to be removed by hand once the operator is sure the backups are no longer
