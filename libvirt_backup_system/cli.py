@@ -136,7 +136,7 @@ def _kopia_passthrough_command(args: argparse.Namespace, config: Config) -> int:
     if config_file is None:
         return 1
     password_file = kopia_repo.password_file_path(config)
-    cache_dir = kopia_repo.cache_dir(config)
+    cache_dir = kopia_repo.cache_dir(config, args.host_id)
     try:
         env = build_kopia_env(password_file, cache_dir)
     except Exception as exc:

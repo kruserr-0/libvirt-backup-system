@@ -34,7 +34,7 @@ def _meta_snapshot(*, host_id: str = "host-b") -> kopia_snapshots.KopiaSnapshot:
 def _stub_peer_repo(monkeypatch: pytest.MonkeyPatch, cfg: Config, peer_cfg: Path) -> None:
     monkeypatch.setattr(kopia_repo, "ensure_local_connected", lambda _cfg: None)
     monkeypatch.setattr(kopia_repo, "password_file_path", lambda _cfg: cfg.prefix / "pw")
-    monkeypatch.setattr(kopia_repo, "cache_dir", lambda _cfg: cfg.prefix / "cache")
+    monkeypatch.setattr(kopia_repo, "cache_dir", lambda _cfg, _host_id=None: cfg.prefix / "cache")
     monkeypatch.setattr(
         kopia_repo,
         "discover_peer_repos",

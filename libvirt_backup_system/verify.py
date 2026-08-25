@@ -23,7 +23,7 @@ def _verify_repo(config: Config, *, host_id: str, config_file_path: object) -> b
         kopia_snapshots.snapshot_verify(
             config_file=config_file_path,  # type: ignore[arg-type]
             password_file=kopia_repo.password_file_path(config),
-            cache_dir=kopia_repo.cache_dir(config),
+            cache_dir=kopia_repo.cache_dir(config, host_id),
             verify_files_percent=1.0,
         )
     except CommandError as exc:

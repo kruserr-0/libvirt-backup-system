@@ -155,12 +155,12 @@ def _supplied_password_connects_existing_peer_repos(cfg: Config, value: str) -> 
         return False
     if not peers:
         return True
-    cache = kopia_repo.cache_dir(cfg)
-    cache.mkdir(parents=True, exist_ok=True)
     kopia_repo.kopia_config_root(cfg).mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         with kopia_password.temporary_password_file(cfg, value) as password_file:
             for peer in peers:
+                cache = kopia_repo.cache_dir(cfg, peer.host_id)
+                cache.mkdir(parents=True, exist_ok=True)
                 try:
                     kopia_client.repository_connect_filesystem(
                         config_file=peer.config_file,

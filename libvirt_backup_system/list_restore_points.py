@@ -88,7 +88,7 @@ def _rows_from_repo_result(config: Config, *, host_id: str, config_file: Path) -
         snapshots = kopia_snapshots.snapshot_list(
             config_file=config_file,
             password_file=kopia_repo.password_file_path(config),
-            cache_dir=kopia_repo.cache_dir(config),
+            cache_dir=kopia_repo.cache_dir(config, host_id),
             tags={"kind": "meta"},
         )
     except CommandError as exc:

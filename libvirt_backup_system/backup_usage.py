@@ -127,7 +127,7 @@ def _disk_usage_from_repo(
     result = run_kopia(
         args,
         password_file=kopia_repo.password_file_path(config),
-        cache_dir=kopia_repo.cache_dir(config),
+        cache_dir=kopia_repo.cache_dir(config, host_id),
     )
     parsed: object = json.loads(result.stdout or "[]")
     if not isinstance(parsed, list):

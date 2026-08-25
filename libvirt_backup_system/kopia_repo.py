@@ -35,8 +35,11 @@ def password_file_path(config: Config) -> Path:
     return prefixed(config.get("KOPIA_PASSWORD_FILE"), config.prefix)
 
 
-def cache_dir(config: Config) -> Path:
-    return prefixed(config.get("KOPIA_CACHE_DIR"), config.prefix)
+def cache_dir(config: Config, host_id: str | None = None) -> Path:
+    # kopia uses an explicitly-set KOPIA_CACHE_DIRECTORY as-is for the whole
+    # connection (no per-repo scoping), so repos with different master keys
+    # must never share one: each repo gets a subdirectory keyed by host_id.
+    return prefixed(config.get("KOPIA_CACHE_DIR"), config.prefix) / (host_id or config.get("HOST_ID"))
 
 
 def local_repo_path(config: Config) -> Path:
@@ -173,9 +176,7 @@ def ensure_local_connected(config: Config) -> Path | None:
 
 
 def _int_or_none(value: str) -> int | None:
-    if not value.strip():
-        return None
-    return int(value)
+    return int(value) if value.strip() else None
 
 
 def _apply_global_policy(config: Config) -> int:
@@ -223,7 +224,7 @@ def ensure_peer_connected(config: Config, host_id: str) -> Path | None:
     if not (peer_repo / "kopia.repository.f").is_file():
         return None
     config_file = peer_config_file(config, host_id)
-    cache = cache_dir(config)
+    cache = cache_dir(config, host_id)
     cache.mkdir(parents=True, exist_ok=True)
     try:
         kopia_client.repository_connect_filesystem(

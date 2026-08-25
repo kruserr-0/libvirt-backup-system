@@ -77,7 +77,7 @@ def _stub_repo_helpers(
     monkeypatch.setattr(kopia_repo, "local_config_file", lambda _cfg: local_cfg)
     monkeypatch.setattr(kopia_repo, "ensure_local_connected", lambda _cfg: local_cfg if local_config_present else None)
     monkeypatch.setattr(kopia_repo, "password_file_path", lambda _cfg: cfg.prefix / "pw")
-    monkeypatch.setattr(kopia_repo, "cache_dir", lambda _cfg: cfg.prefix / "cache")
+    monkeypatch.setattr(kopia_repo, "cache_dir", lambda _cfg, _host_id=None: cfg.prefix / "cache")
     monkeypatch.setattr(kopia_repo, "discover_peer_repos", lambda _cfg: peers or [])
     monkeypatch.setattr(
         kopia_repo,
@@ -245,7 +245,7 @@ def test_enumerate_backups_combines_local_and_peer_rows(tmp_path: Path, monkeypa
     monkeypatch.setattr(kopia_repo, "local_config_file", lambda _cfg: local_cfg)
     monkeypatch.setattr(kopia_repo, "ensure_local_connected", lambda _cfg: local_cfg)
     monkeypatch.setattr(kopia_repo, "password_file_path", lambda _cfg: cfg.prefix / "pw")
-    monkeypatch.setattr(kopia_repo, "cache_dir", lambda _cfg: cfg.prefix / "cache")
+    monkeypatch.setattr(kopia_repo, "cache_dir", lambda _cfg, _host_id=None: cfg.prefix / "cache")
     monkeypatch.setattr(
         kopia_repo,
         "discover_peer_repos",

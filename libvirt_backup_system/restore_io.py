@@ -22,7 +22,7 @@ def restore_manifest(config: Config, row: BackupRow, staging: Path) -> Manifest 
         kopia_snapshots.snapshot_restore_to_path(
             config_file=row.config_file,
             password_file=kopia_repo.password_file_path(config),
-            cache_dir=kopia_repo.cache_dir(config),
+            cache_dir=kopia_repo.cache_dir(config, row.host_id),
             snapshot_id=row.snapshot_id,
             dest=meta_dir,
         )
@@ -61,7 +61,7 @@ def disk_snapshot_id(config: Config, row: BackupRow, target: str) -> str | None:
         snapshots = kopia_snapshots.snapshot_list(
             config_file=row.config_file,
             password_file=kopia_repo.password_file_path(config),
-            cache_dir=kopia_repo.cache_dir(config),
+            cache_dir=kopia_repo.cache_dir(config, row.host_id),
             tags={"kind": "disk", "vm-uuid": row.vm_uuid, "run-id": row.run_id, "disk": target, "host": row.host_id},
         )
     except (CommandError, ValueError) as exc:
@@ -89,7 +89,7 @@ def stream_disk_to_qcow2(config: Config, row: BackupRow, snapshot_id: str, file_
             kopia_snapshots.snapshot_restore_to_path(
                 config_file=row.config_file,
                 password_file=kopia_repo.password_file_path(config),
-                cache_dir=kopia_repo.cache_dir(config),
+                cache_dir=kopia_repo.cache_dir(config, row.host_id),
                 snapshot_id=f"{snapshot_id}/{file_in_snap}",
                 dest=raw_path,
             )

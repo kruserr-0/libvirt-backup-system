@@ -80,7 +80,7 @@ def _stub_two_peers(
     local_cfg.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(kopia_repo, "ensure_local_connected", lambda _cfg: local_cfg)
     monkeypatch.setattr(kopia_repo, "password_file_path", lambda _cfg: cfg.prefix / "pw")
-    monkeypatch.setattr(kopia_repo, "cache_dir", lambda _cfg: cfg.prefix / "cache")
+    monkeypatch.setattr(kopia_repo, "cache_dir", lambda _cfg, _host_id=None: cfg.prefix / "cache")
     base = cfg.path_value("BACKUP_PATH")
     peers = [
         kopia_repo.PeerRepo("host-b", base / "host-b" / "kopia-repo", populated_cfg),
