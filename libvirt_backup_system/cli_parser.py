@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import argparse
 
-from . import cli_help
+from . import cli_help, cli_help_restore
+from .cli_parser_temp_restore import add_temp_restore_parser
 from .kopia_password import PasswordSpec
 
 
@@ -197,13 +198,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     restore_parser = _add_subparser(
-        sub, "restore", help_text=cli_help.RESTORE_HELP, description=cli_help.RESTORE_DESCRIPTION
+        sub, "restore", help_text=cli_help_restore.RESTORE_HELP, description=cli_help_restore.RESTORE_DESCRIPTION
     )
     restore_parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
         help="Stream full restore output instead of only summary success/error events.",
+    )
+    restore_parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help=(
+            "Skip the interactive overwrite confirmation. Required for an overwrite restore "
+            "when stdin is not a TTY (scripts, CI)."
+        ),
+    )
+    restore_parser.add_argument(
+        "--no-pre-backup",
+        action="store_true",
+        help=(
+            "Skip the safety backup of the existing VM normally taken before its disks are "
+            "overwritten. Also required to overwrite a VM that is not running (an offline VM "
+            "cannot be snapshotted for the safety backup)."
+        ),
     )
     restore_parser.add_argument(
         "--host-id",
@@ -228,6 +247,8 @@ def build_parser() -> argparse.ArgumentParser:
             "list-restore-points output. Exact match against the meta snapshot's timestamp tag."
         ),
     )
+
+    add_temp_restore_parser(sub)
 
     # Hidden ad-hoc escape hatch: ``kopia-passthrough`` shells out to the
     # ``kopia`` binary against a managed repo. Marked ``help=SUPPRESS`` so it

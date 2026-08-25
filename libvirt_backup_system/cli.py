@@ -12,6 +12,8 @@ from . import backup_usage, kopia_repo
 from .backup import run_backups
 from .cli_parser import build_parser
 from .cli_parser import password_spec_from_args as _password_spec_from_args
+from .cli_restore import restore_command as _restore_command
+from .cli_restore import temp_restore_command as _temp_restore_command
 from .config import Config
 from .config_sync import update_shared_config as _update_config_impl
 from .doctor import doctor
@@ -26,7 +28,6 @@ from .node_token import add_node as _add_node_impl
 from .node_token import show_token as _show_token_impl
 from .paths import runtime_backup_path_ok
 from .preflight import check, validate_config
-from .restore import restore
 from .shell import configure_default_timeout
 from .systemd_start import start
 from .systemd_units import dispatch_via_systemd, show_logs, status
@@ -46,25 +47,6 @@ def _run_command(config: Config) -> int:
             if preflight_code != 0:
                 return preflight_code
             return run_backups(config)
-    except LockBusyError as exc:
-        event("error", "another run in progress", lock_path=str(exc.path))
-        return 1
-
-
-def _restore_command(config: Config, args: argparse.Namespace) -> int:
-    config_code = validate_config(config)
-    if config_code != 0:
-        return config_code
-    try:
-        with acquire_run_lock(config):
-            return restore(
-                config,
-                args.vm_uuid,
-                args.timestamp,
-                host_id=args.host_id,
-                run_id=args.run_id,
-                verbose=args.verbose,
-            )
     except LockBusyError as exc:
         event("error", "another run in progress", lock_path=str(exc.path))
         return 1
@@ -270,12 +252,15 @@ def main(argv: list[str] | None = None) -> int:
             except LockBusyError as exc:
                 event("error", "another run in progress", lock_path=str(exc.path))
                 return 1
-        if args.command == "restore":
-            return _restore_command(config, args)
+        config_and_args = {
+            "restore": _restore_command,
+            "temp-restore": _temp_restore_command,
+            "du": _du_command,
+        }
+        if args.command in config_and_args:
+            return config_and_args[args.command](config, args)
         if args.command == "list-restore-points":
             return _list_restore_points_command(config, json_output=args.json)
-        if args.command == "du":
-            return _du_command(config, args)
         if args.command == "kopia-passthrough":
             return _kopia_passthrough_command(args, config)
     except KeyboardInterrupt:

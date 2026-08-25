@@ -82,7 +82,7 @@ def test_restore_overwrite_shutdown_failure(tmp_path: Path, monkeypatch: pytest.
 
     monkeypatch.setattr(restore, "run", fake_run)
     monkeypatch.setattr(restore, "define_restored_domain", lambda *_a, **_kw: True)
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP) == 1
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, assume_yes=True, pre_backup=False) == 1
 
 
 def test_restore_overwrite_undefine_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,7 +102,7 @@ def test_restore_overwrite_undefine_failure(tmp_path: Path, monkeypatch: pytest.
 
     monkeypatch.setattr(restore, "run", fake_run)
     monkeypatch.setattr(restore, "define_restored_domain", lambda *_a, **_kw: True)
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP) == 1
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, assume_yes=True, pre_backup=False) == 1
 
 
 def test_restore_turnkey_disk_snapshot_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -187,7 +187,7 @@ def test_restore_overwrite_define_failure(tmp_path: Path, monkeypatch: pytest.Mo
         return False
 
     monkeypatch.setattr(restore, "define_restored_domain", fail_define)
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP) == 1
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, assume_yes=True, pre_backup=False) == 1
     assert define_called is True
     assert original_disk.read_bytes() == b"old-disk"
     assert len(defined_paths) == 1
@@ -236,7 +236,7 @@ def test_restore_overwrite_replace_failure_redefines_original_domain(
 
     monkeypatch.setattr(restore, "run", fake_run)
     monkeypatch.setattr(Path, "replace", fail_temp_replace)
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP) == 1
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, assume_yes=True, pre_backup=False) == 1
     assert original_disk.read_bytes() == b"old-disk"
     assert len(defined_paths) == 1
     assert defined_paths[0].read_text(encoding="utf-8") == original_xml
@@ -261,5 +261,5 @@ def test_restore_overwrite_disk_materialize_failure(tmp_path: Path, monkeypatch:
 
     monkeypatch.setattr(restore, "run", fake_run)
     monkeypatch.setattr(restore, "define_restored_domain", lambda *_a, **_kw: True)
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP) == 1
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, assume_yes=True, pre_backup=False) == 1
     assert not any("destroy" in args or "undefine" in args for args in calls)

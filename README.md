@@ -136,4 +136,5 @@ default `7d`) checks the local repo on its own cadence.
 - [Kopia repo layout, manual operations](docs/kopia.md)
 - [Kopia password handling, rotation, and recovery](docs/kopia-password.md)
 - [Manual restore process](docs/manual-restore.md)
+- [Development and running the e2e suite](DEVELOPMENT.md)
 - [Testing on Linux](docs/testing-on-linux.md)

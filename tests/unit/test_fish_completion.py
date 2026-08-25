@@ -82,7 +82,7 @@ def test_completion_mentions_visible_argparse_subcommands() -> None:
         ("list-restore-points", {"json"}),
         ("du", {"json"}),
         ("verify", {"include-hosts"}),
-        ("restore", {"verbose", "host-id", "run-id"}),
+        ("restore", {"verbose", "host-id", "run-id", "yes", "no-pre-backup"}),
     ],
 )
 def test_completion_mentions_operator_visible_argparse_options(command: str | None, expected_options: set[str]) -> None:

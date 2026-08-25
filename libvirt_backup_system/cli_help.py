@@ -41,68 +41,17 @@ Common workflows:
     sudo libvirt-backup-system list-vms
     sudo libvirt-backup-system doctor
 
-  Restore a single backup run:
+  Restore a single backup run (OVERWRITES the live VM -- downtime):
     sudo libvirt-backup-system list-restore-points | grep my-vm
     sudo libvirt-backup-system restore <VM_UUID> <TIMESTAMP>
+
+  Restore into a throwaway clone VM instead (no downtime, original untouched):
+    sudo libvirt-backup-system temp-restore restore <VM_UUID> <TIMESTAMP>
+    sudo libvirt-backup-system temp-restore remove <VM_NAME>-temp-<TIMESTAMP>
 
 Run ``libvirt-backup-system <subcommand> --help`` for the full reference on any
 subcommand. The ``restore`` help in particular documents the overwrite-vs-
 turnkey decision, the staging directory layout, and the safety guarantees."""
-
-
-RESTORE_DESCRIPTION = """\
-Restore a single backup run identified by its (VM_UUID, TIMESTAMP) pair.
-
-How to pick the arguments:
-  Copy the ``vm-uuid`` and ``timestamp`` columns of any line printed by
-  ``list-restore-points`` straight into this command. There is no rounding,
-  no closest-match: TIMESTAMP is the exact per-run target.
-
-How the snapshot is located:
-  ``restore`` walks every per-host kopia repo discovered under
-  ``BACKUP_PATH/<host>/kopia-repo/`` (not just the current HOST_ID) so a
-  recovery host that mounted the backup tree can restore VMs that were
-  taken on a different KVM host. The per-run ``kind:meta`` snapshot is
-  matched by its ``vm-uuid`` and ``timestamp`` tags. If duplicate rows share
-  that pair, pass ``--host-id`` or ``--run-id`` from ``list-restore-points``
-  to select the intended run.
-
-What action is chosen:
-  OVERWRITE  Same host AND a local libvirt domain with VM_UUID exists.
-             The current VM is force-shut-down (``virsh destroy``),
-             undefined with ``--checkpoints-metadata`` (to clear any
-             leftover libvirt checkpoints), and then redefined from the
-             backup XML pointing at restored disks. Existing disk files
-             are replaced. Refuses to proceed if the shutdown fails.
-
-  TURNKEY    Anything else: cross-host recovery, or the local VM no longer
-             exists. Restored disks are written under
-             /var/lib/libvirt-backup-system/restore/<uuid>-<timestamp>/ and
-             the domain XML is rewritten so ``<source>`` elements point at
-             the restored qcow2 files. The recovered VM is one
-             ``virsh start`` away from booting.
-
-What the underlying command runs:
-  ``restore`` materializes the per-run manifest by streaming the meta
-  snapshot via ``kopia snapshot restore``, then for each disk in the
-  manifest pipes ``kopia snapshot restore <snap-id>/<file> -`` into
-  ``qemu-img convert -f raw -O qcow2 -S 4096 -`` to produce a sparse qcow2
-  at the chosen destination. By default restore prints only summary
-  success/error events; pass ``-v``/``--verbose`` to log each restored
-  disk path.
-
-Safety guarantees:
-  * VM_BLACKLIST is ignored: blacklisting scopes to *taking* new backups, not
-    to restoring from existing ones.
-  * The staging directory is recreated on every restore so a leftover from
-    an interrupted earlier restore cannot contaminate the current one.
-  * Holds the same run-lock as ``run`` to avoid reading a repo state that
-    a concurrent backup is still writing into.
-
-Example:
-  sudo libvirt-backup-system list-restore-points | grep my-vm
-  sudo libvirt-backup-system restore \\
-       aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa 20260507T101112"""
 
 
 INSTALL_HELP = "Install the wrapper, config file, package copy, and systemd units."
@@ -310,9 +259,6 @@ different KVM host are visible alongside the local ones."""
 
 
 DU_HELP = "Show backup disk usage by host or VM."
-
-
-RESTORE_HELP = "Restore a backup run identified by VM_UUID and TIMESTAMP."
 
 
 CHANGE_PASSWORD_HELP = "Rotate the shared kopia password on the local host."

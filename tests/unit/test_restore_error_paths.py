@@ -139,7 +139,7 @@ def test_restore_overwrite_exits_when_dumpxml_fails(tmp_path: Path, monkeypatch:
 
     monkeypatch.setattr(restore, "run", fake_run)
     monkeypatch.setattr(restore, "define_restored_domain", lambda *_a, **_kw: pytest.fail("define must not be called"))
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP) == 1
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, assume_yes=True, pre_backup=False) == 1
     # Temp file should have been cleaned up.
     temp = src_dir / ".myvm-vda.qcow2.vda.restore.tmp"
     assert not temp.exists()
@@ -178,7 +178,7 @@ def test_restore_overwrite_exits_when_shutdown_fails_after_dumpxml(
 
     monkeypatch.setattr(restore, "run", fake_run)
     monkeypatch.setattr(restore, "define_restored_domain", lambda *_a, **_kw: pytest.fail("define must not be called"))
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP) == 1
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, assume_yes=True, pre_backup=False) == 1
     # Temp file should have been cleaned up.
     temp = src_dir / ".myvm-vda.qcow2.vda.restore.tmp"
     assert not temp.exists()
@@ -210,7 +210,7 @@ def test_restore_overwrite_exits_when_post_define_start_fails(tmp_path: Path, mo
     monkeypatch.setattr(restore, "run", fake_run)
     monkeypatch.setattr(restore, "define_restored_domain", lambda *_a, **_kw: True)
     monkeypatch.setattr(restore, "restore_vm_power", lambda *_a, **_kw: False)
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP) == 1
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, assume_yes=True, pre_backup=False) == 1
 
 
 def test_restore_turnkey_exits_when_post_define_start_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

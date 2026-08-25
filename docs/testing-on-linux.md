@@ -165,9 +165,12 @@ Run the end-to-end suite:
 uv run --locked --extra dev python -m tests.e2e
 ```
 
-The runner executes a single scenario: `tests/e2e/real_kvm_case.py`. It probes
+The runner executes two scenarios behind one capability probe:
+`tests/e2e/real_kvm_case.py` (the backup engine) and
+`tests/e2e/temp_restore_case.py` (temp-restore clones and the
+overwrite-restore guards; see [DEVELOPMENT.md](../DEVELOPMENT.md)). It probes
 the host for `/dev/kvm`, libvirt, `kopia`, and `nbdcopy`; if any probe fails the
-case is skipped with a notice. When the probes pass it defines two ephemeral
+cases are skipped with a notice. When the probes pass the first case defines two ephemeral
 domains under `qemu:///session` (one running, one shut off) backed by tiny
 qcow2 disks under a temporary workdir, installs `libvirt-backup-system` into a
 `--prefix` sandbox with a generated kopia password, then drives `check`,

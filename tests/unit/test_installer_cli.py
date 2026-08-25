@@ -66,7 +66,8 @@ def test_cli_commands(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setattr("libvirt_backup_system.cli.verify", lambda config, *, include_hosts=None: 0)
     assert main(["verify"]) == 0
 
-    monkeypatch.setattr("libvirt_backup_system.cli.restore", lambda config, vm_uuid, timestamp, **kwargs: 4)
+    monkeypatch.setattr("libvirt_backup_system.cli_restore.validate_config", lambda config: 0)
+    monkeypatch.setattr("libvirt_backup_system.cli_restore.restore", lambda config, vm_uuid, timestamp, **kwargs: 4)
     assert main(["restore", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "20260507T101112"]) == 4
 
 
@@ -91,9 +92,9 @@ def test_cli_restore_reports_validate_config(tmp_path: Path, monkeypatch) -> Non
     monkeypatch.setattr(
         "libvirt_backup_system.cli.Config.load", lambda config_path=None, prefix=None: _fake_config(tmp_path)
     )
-    monkeypatch.setattr("libvirt_backup_system.cli.validate_config", lambda config: 7)
+    monkeypatch.setattr("libvirt_backup_system.cli_restore.validate_config", lambda config: 7)
     monkeypatch.setattr(
-        "libvirt_backup_system.cli.restore",
+        "libvirt_backup_system.cli_restore.restore",
         lambda *a, **kw: (_ for _ in ()).throw(AssertionError("must not run when validate fails")),
     )
     assert main(["restore", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "20260507T101112"]) == 7
@@ -107,16 +108,16 @@ def test_cli_restore_reports_lock_busy(tmp_path: Path, monkeypatch, capsys) -> N
     monkeypatch.setattr(
         "libvirt_backup_system.cli.Config.load", lambda config_path=None, prefix=None: _fake_config(tmp_path)
     )
-    monkeypatch.setattr("libvirt_backup_system.cli.validate_config", lambda config: 0)
+    monkeypatch.setattr("libvirt_backup_system.cli_restore.validate_config", lambda config: 0)
 
     @contextlib.contextmanager
     def busy(config: object):
         raise LockBusyError(tmp_path / "run.lock")
         yield  # pragma: no cover
 
-    monkeypatch.setattr("libvirt_backup_system.cli.acquire_run_lock", busy)
+    monkeypatch.setattr("libvirt_backup_system.cli_restore.acquire_run_lock", busy)
     monkeypatch.setattr(
-        "libvirt_backup_system.cli.restore",
+        "libvirt_backup_system.cli_restore.restore",
         lambda *a, **kw: (_ for _ in ()).throw(AssertionError("restore must not run while lock is busy")),
     )
     assert main(["restore", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "20260507T101112"]) == 1

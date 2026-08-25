@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 import shutil
-import xml.etree.ElementTree as ET
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +13,7 @@ from .logging_json import event
 from .manifest import Manifest
 from .paths import runtime_backup_path_ok
 from .restore_define import RESTORED_CONFIG_FILE, define_restored_domain
+from .restore_guard import overwrite_allowed
 from .restore_io import disk_snapshot_id as _disk_snapshot_id
 from .restore_io import manifest_matches_request as _manifest_matches_request
 from .restore_io import restore_manifest as _restore_manifest
@@ -27,6 +27,8 @@ from .restore_overwrite import (
     rollback_overwrite_disks,
 )
 from .restore_state import restore_vm_power
+from .restore_xml import rewrite_domain_disk_sources as _rewrite_domain_disk_sources
+from .restore_xml import turnkey_dest_map as _turnkey_dest_map
 from .shell import CommandError, run
 from .storage import subpath_is_safe
 from .vms import is_safe_vm_name, is_safe_vm_uuid
@@ -69,6 +71,11 @@ def _match_row(
         return None
     event("error", "restore timestamp matched multiple backups", **log_context)
     return None
+
+
+# Public alias for the temp-restore flow; the underscore name stays put so the
+# focused ``_match_row`` tests and their monkeypatching keep working.
+match_row = _match_row
 
 
 def _ensure_staging_root(config: Config) -> Path | None:
@@ -170,36 +177,6 @@ def _materialize_disks(ctx: _RestoreContext, config: Config, dest_map: dict[str,
     return True
 
 
-def _turnkey_dest_map(manifest: Manifest, staging: Path) -> dict[str, Path]:
-    return {disk.target: staging / _turnkey_disk_filename(disk.target) for disk in manifest.disks}
-
-
-def _turnkey_disk_filename(target: str) -> str:
-    safe_target = target.replace("/", "_")
-    return f"{'disk' if safe_target in {'', '.', '..'} else safe_target}.qcow2"
-
-
-def _rewrite_domain_disk_sources(domain_xml: str, dest_map: dict[str, Path]) -> str:
-    """Rewrite restored file/block disk sources by ``<target dev=...>``."""
-    root = ET.fromstring(domain_xml)  # noqa: S314
-    for disk_el in root.findall(".//devices/disk"):
-        target_el = disk_el.find("target")
-        if target_el is None:
-            continue
-        target_dev = target_el.get("dev")
-        if target_dev is None or target_dev not in dest_map:
-            continue
-        source_el = disk_el.find("source")
-        if source_el is None:
-            continue
-        new_path = str(dest_map[target_dev])
-        if "file" in source_el.attrib:
-            source_el.set("file", new_path)
-        elif "dev" in source_el.attrib:
-            source_el.set("dev", new_path)
-    return ET.tostring(root, encoding="unicode")
-
-
 def _write_xml(ctx: _RestoreContext, filename: str, domain_xml: str) -> Path:
     path = ctx.staging / filename
     path.write_text(domain_xml, encoding="utf-8")
@@ -265,6 +242,8 @@ def restore(
     host_id: str | None = None,
     run_id: str | None = None,
     verbose: bool = True,
+    assume_yes: bool = False,
+    pre_backup: bool = True,
 ) -> int:
     if not is_safe_vm_uuid(vm_uuid):
         event("error", "restore vm_uuid is not a valid UUID", vm_uuid=vm_uuid)
@@ -294,5 +273,7 @@ def restore(
         row.host_id == config.get("HOST_ID")
         and (local_name := _local_domain_name_for_uuid(config, vm_uuid)) is not None
     ):
+        if not overwrite_allowed(config, local_name, vm_uuid, assume_yes=assume_yes, pre_backup=pre_backup):
+            return 1
         return _restore_overwrite(config, ctx, local_name)
     return _restore_turnkey(config, ctx)

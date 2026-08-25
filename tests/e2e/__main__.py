@@ -9,6 +9,9 @@ from tests.e2e.real_kvm_case import real_kvm_skip_reason
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# Every real-KVM scenario module, run in order behind one capability probe.
+CASE_MODULES = ("tests.e2e.real_kvm_case", "tests.e2e.temp_restore_case")
+
 
 def run_cmd(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     print("+", " ".join(args), flush=True)
@@ -23,8 +26,12 @@ def run_real_kvm_if_available(*, require: bool) -> int:
             return 1
         print(f"SKIP real KVM e2e: {reason}")
         return 0
-    # Capability probe passed: a failure here is a real backup/verify break.
-    return run_cmd([sys.executable, "-m", "tests.e2e.real_kvm_case"], check=False).returncode
+    # Capability probe passed: a failure here is a real backup/restore break.
+    for module in CASE_MODULES:
+        code = run_cmd([sys.executable, "-m", module], check=False).returncode
+        if code != 0:
+            return code
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

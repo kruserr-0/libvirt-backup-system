@@ -1,7 +1,7 @@
 # Fish completion for libvirt-backup-system.
 complete -c libvirt-backup-system -f
 
-set -g __lbs_subcommands install add-node show-token update-config change-password uninstall check preflight doctor run backup start status log logs list-vms verify list-restore-points du restore
+set -g __lbs_subcommands install add-node show-token update-config change-password uninstall check preflight doctor run backup start status log logs list-vms verify list-restore-points du restore temp-restore
 
 function __lbs_no_subcommand_seen
     for token in (commandline -opc)
@@ -30,7 +30,10 @@ complete -c libvirt-backup-system -n "__lbs_no_subcommand_seen" -a list-vms -d "
 complete -c libvirt-backup-system -n "__lbs_no_subcommand_seen" -a verify -d "Run kopia snapshot verify against discovered repos"
 complete -c libvirt-backup-system -n "__lbs_no_subcommand_seen" -a list-restore-points -d "List every restorable backup run across all hosts and VMs"
 complete -c libvirt-backup-system -n "__lbs_no_subcommand_seen" -a du -d "Show backup disk usage by host or VM"
-complete -c libvirt-backup-system -n "__lbs_no_subcommand_seen" -a restore -d "Restore a backup run identified by VM_UUID and TIMESTAMP"
+complete -c libvirt-backup-system -n "__lbs_no_subcommand_seen" -a restore -d "Restore a backup run by OVERWRITING the live VM (destructive; downtime)"
+complete -c libvirt-backup-system -n "__lbs_no_subcommand_seen" -a temp-restore -d "Restore into a throwaway clone VM beside the original (no downtime)"
+# temp-restore subcommands; its `restore` reuses the dynamic UUID/TIMESTAMP completion below.
+complete -c libvirt-backup-system -n "__fish_seen_subcommand_from temp-restore; and not __fish_seen_subcommand_from restore list stop remove" -f -a "restore list stop remove" -d "temp-restore subcommand"
 
 # Global flags (available at every position).
 complete -c libvirt-backup-system -l config -r -F -d "Path to libvirt-backup.env"
@@ -75,6 +78,8 @@ complete -c libvirt-backup-system -n "__fish_seen_subcommand_from verify" -l inc
 complete -c libvirt-backup-system -n "__fish_seen_subcommand_from restore" -s v -l verbose -d "Stream full restore output"
 complete -c libvirt-backup-system -n "__fish_seen_subcommand_from restore" -l host-id -r -f -d "Disambiguate duplicate restore points by source host"
 complete -c libvirt-backup-system -n "__fish_seen_subcommand_from restore" -l run-id -r -f -d "Disambiguate duplicate restore points by run ID"
+complete -c libvirt-backup-system -n "__fish_seen_subcommand_from restore; and not __fish_seen_subcommand_from temp-restore" -s y -l yes -d "Skip the interactive overwrite confirmation"
+complete -c libvirt-backup-system -n "__fish_seen_subcommand_from restore; and not __fish_seen_subcommand_from temp-restore" -l no-pre-backup -d "Skip the safety backup taken before overwriting the existing VM"
 
 function __lbs_query_restore_points_uncached
     sudo -n libvirt-backup-system list-restore-points 2>/dev/null

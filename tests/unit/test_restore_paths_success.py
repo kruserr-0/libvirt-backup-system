@@ -91,7 +91,7 @@ def test_restore_overwrite_path_success(
         return True
 
     monkeypatch.setattr(restore, "define_restored_domain", fake_define)
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, verbose=True) == 0
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, verbose=True, assume_yes=True, pre_backup=False) == 0
     flat = {token for args in calls for token in args}
     assert {"destroy", "domstate", "undefine"}.issubset(flat)
     assert captured["name"] == "myvm"
@@ -142,7 +142,7 @@ def test_restore_overwrite_writes_each_disk_to_its_own_source_path(
         lambda args, **_: CommandResult(args, 0, "myvm\n" if "domname" in args else "shut off\n", ""),
     )
     monkeypatch.setattr(restore, "define_restored_domain", lambda *_a, **_kw: True)
-    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, verbose=False) == 0
+    assert restore.restore(cfg, ALPHA_UUID, TIMESTAMP, verbose=False, assume_yes=True, pre_backup=False) == 0
     assert streamed == [
         Path(manifest.disks[0].source_path).with_name(".alpha-system.qcow2.vda.restore.tmp"),
         Path(manifest.disks[1].source_path).with_name(".alpha-data.qcow2.vdb.restore.tmp"),

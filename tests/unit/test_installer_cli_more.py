@@ -92,7 +92,7 @@ def test_cli_restore_forwards_disambiguators(tmp_path: Path, monkeypatch) -> Non
     cfg = _fake_config(tmp_path)
     captured: dict[str, object] = {}
     monkeypatch.setattr("libvirt_backup_system.cli.Config.load", lambda config_path=None, prefix=None: cfg)
-    monkeypatch.setattr("libvirt_backup_system.cli.validate_config", lambda config: 0)
+    monkeypatch.setattr("libvirt_backup_system.cli_restore.validate_config", lambda config: 0)
 
     @contextlib.contextmanager
     def fake_lock(config: object):
@@ -103,8 +103,8 @@ def test_cli_restore_forwards_disambiguators(tmp_path: Path, monkeypatch) -> Non
         captured.update({"config": config, "vm_uuid": vm_uuid, "timestamp": timestamp, **kwargs})
         return 0
 
-    monkeypatch.setattr("libvirt_backup_system.cli.acquire_run_lock", fake_lock)
-    monkeypatch.setattr("libvirt_backup_system.cli.restore", fake_restore)
+    monkeypatch.setattr("libvirt_backup_system.cli_restore.acquire_run_lock", fake_lock)
+    monkeypatch.setattr("libvirt_backup_system.cli_restore.restore", fake_restore)
     assert main(["restore", "--host-id", "host-b", "--run-id", "run-2", row_uuid(), "20260507T101112"]) == 0
     assert captured == {
         "config": cfg,
@@ -113,6 +113,8 @@ def test_cli_restore_forwards_disambiguators(tmp_path: Path, monkeypatch) -> Non
         "host_id": "host-b",
         "run_id": "run-2",
         "verbose": False,
+        "assume_yes": False,
+        "pre_backup": True,
     }
 
 
