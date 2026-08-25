@@ -29,8 +29,9 @@ from .node_token import show_token as _show_token_impl
 from .paths import runtime_backup_path_ok
 from .preflight import check, validate_config
 from .shell import configure_default_timeout
+from .systemd_dispatch import dispatch_via_systemd
 from .systemd_start import start
-from .systemd_units import dispatch_via_systemd, show_logs, status
+from .systemd_units import show_logs, status
 from .verify import verify
 from .vms import list_vms
 

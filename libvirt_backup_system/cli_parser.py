@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from . import cli_help, cli_help_restore
+from . import cli_help, cli_help_password, cli_help_restore
 from .cli_parser_temp_restore import add_temp_restore_parser
 from .kopia_password import PasswordSpec
 
@@ -111,8 +111,8 @@ def build_parser() -> argparse.ArgumentParser:
     change_password_parser = _add_subparser(
         sub,
         "change-password",
-        help_text=cli_help.CHANGE_PASSWORD_HELP,
-        description=cli_help.CHANGE_PASSWORD_DESCRIPTION,
+        help_text=cli_help_password.CHANGE_PASSWORD_HELP,
+        description=cli_help_password.CHANGE_PASSWORD_DESCRIPTION,
     )
     _add_password_flags(change_password_parser, prefix="new-")
 

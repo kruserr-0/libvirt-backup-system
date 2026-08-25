@@ -83,15 +83,8 @@ def install(
                 return 1
             if password_required and _repo_preflight(cfg) != 0:
                 return 1
-            resolved_password_spec = password_spec or kopia_password.PasswordSpec()
-            password_supplied = any(
-                value is not None
-                for value in (
-                    resolved_password_spec.literal,
-                    resolved_password_spec.file,
-                    resolved_password_spec.env_var,
-                )
-            )
+            spec = password_spec or kopia_password.PasswordSpec()
+            password_supplied = any(value is not None for value in (spec.literal, spec.file, spec.env_var))
             password_missing = not kopia_repo.password_file_path(cfg).exists()
             binaries_installed = False
             if password_required or password_supplied or password_missing:
@@ -100,7 +93,7 @@ def install(
                     if binary_code != 0:
                         return binary_code
                     binaries_installed = True
-                password_code = _install_password(cfg, resolved_password_spec)
+                password_code = _install_password(cfg, spec)
                 if password_code != 0:
                     return password_code
             if not binaries_installed:

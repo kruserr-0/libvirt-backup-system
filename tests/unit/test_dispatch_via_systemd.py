@@ -7,22 +7,17 @@ from typing import Any
 
 import pytest
 
-from libvirt_backup_system import cli, systemd_units
-from libvirt_backup_system.systemd_units import (
-    CHECK_UNIT_NAME,
-    DISPATCH_OPT_OUT_ENV,
-    RUN_UNIT_NAME,
-    _await_unit,
-    dispatch_via_systemd,
-)
+from libvirt_backup_system import cli, systemd_dispatch, systemd_units
+from libvirt_backup_system.systemd_dispatch import DISPATCH_OPT_OUT_ENV, _await_unit, dispatch_via_systemd
+from libvirt_backup_system.systemd_units import CHECK_UNIT_NAME, RUN_UNIT_NAME
 
 
 def _fake_systemd_host(tmp_path: Path, monkeypatch) -> Path:
     systemd_dir = tmp_path / "etc/systemd/system"
     systemd_dir.mkdir(parents=True)
-    monkeypatch.setattr("libvirt_backup_system.systemd_units.root_prefix", lambda prefix=None: Path("/"))
+    monkeypatch.setattr("libvirt_backup_system.systemd_dispatch.root_prefix", lambda prefix=None: Path("/"))
     monkeypatch.setattr(
-        "libvirt_backup_system.systemd_units.prefixed", lambda path, root: tmp_path / str(path).lstrip("/")
+        "libvirt_backup_system.systemd_dispatch.prefixed", lambda path, root: tmp_path / str(path).lstrip("/")
     )
     monkeypatch.setattr("libvirt_backup_system.systemd_units.shutil.which", lambda binary: "/bin/systemctl")
     original_exists = Path.exists
@@ -161,7 +156,7 @@ def test_await_unit_forwards_sigint_to_systemctl_stop(monkeypatch, capsys) -> No
             handler_holder["handler"] = handler
         return real_signal(signum, handler)
 
-    monkeypatch.setattr("libvirt_backup_system.systemd_units.signal.signal", capture_signal)
+    monkeypatch.setattr("libvirt_backup_system.systemd_dispatch.signal.signal", capture_signal)
 
     stop_calls: list[list[str]] = []
     start_calls: list[list[str]] = []
@@ -204,7 +199,7 @@ def test_await_unit_signal_handler_swallows_oserror(monkeypatch, capsys) -> None
             handler_holder["handler"] = handler
         return real_signal(signum, handler)
 
-    monkeypatch.setattr("libvirt_backup_system.systemd_units.signal.signal", capture_signal)
+    monkeypatch.setattr("libvirt_backup_system.systemd_dispatch.signal.signal", capture_signal)
 
     class _Result:
         def __init__(self, returncode: int) -> None:
@@ -229,7 +224,7 @@ def test_await_unit_signal_handler_swallows_oserror(monkeypatch, capsys) -> None
 
 def test_unit_name_for_rejects_unknown_subcommand() -> None:
     with pytest.raises(ValueError, match="no dispatch unit"):
-        systemd_units.unit_name_for("status")
+        systemd_dispatch.unit_name_for("status")
 
 
 def test_render_unit_service_rejects_unknown_subcommand(tmp_path: Path) -> None:

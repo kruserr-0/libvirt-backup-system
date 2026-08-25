@@ -4,16 +4,17 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from libvirt_backup_system.systemd_units import CHECK_UNIT_NAME, DISPATCH_OPT_OUT_ENV, dispatch_via_systemd
+from libvirt_backup_system.systemd_dispatch import DISPATCH_OPT_OUT_ENV, dispatch_via_systemd
+from libvirt_backup_system.systemd_units import CHECK_UNIT_NAME
 
 
 def test_dispatch_check_prints_passed_on_success(tmp_path: Path, monkeypatch, capsys) -> None:
     systemd_dir = tmp_path / "etc/systemd/system"
     systemd_dir.mkdir(parents=True)
     (systemd_dir / CHECK_UNIT_NAME).write_text("[Unit]\n", encoding="utf-8")
-    monkeypatch.setattr("libvirt_backup_system.systemd_units.root_prefix", lambda prefix=None: Path("/"))
+    monkeypatch.setattr("libvirt_backup_system.systemd_dispatch.root_prefix", lambda prefix=None: Path("/"))
     monkeypatch.setattr(
-        "libvirt_backup_system.systemd_units.prefixed", lambda path, root: tmp_path / str(path).lstrip("/")
+        "libvirt_backup_system.systemd_dispatch.prefixed", lambda path, root: tmp_path / str(path).lstrip("/")
     )
     monkeypatch.setattr("libvirt_backup_system.systemd_units.shutil.which", lambda binary: "/bin/systemctl")
     monkeypatch.delenv("INVOCATION_ID", raising=False)

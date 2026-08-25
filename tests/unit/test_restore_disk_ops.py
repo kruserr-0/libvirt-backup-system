@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -168,12 +167,21 @@ def test_materialize_disks_unlinks_existing_file(tmp_path: Path, monkeypatch: py
     assert observed["existed_before_stream"] is False
 
 
+def _tmp_manifest(tmp_path: Path) -> Any:
+    # Keep every destination under tmp_path: unit tests must never depend on
+    # (or create) real system dirs like /var/lib/libvirt/images.
+    disk = ManifestDisk(
+        target="vda", source_path=str(tmp_path / "imgs/sys.qcow2"), virtual_size_bytes=1, snapshot_filename="vda.raw"
+    )
+    return make_manifest(disks=(disk,))
+
+
 def test_materialize_disks_returns_false_on_missing_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(restore, "_disk_snapshot_id", lambda *_a, **_kw: None)
     monkeypatch.setattr(
         restore, "_stream_disk_to_qcow2", lambda *_a, **_kw: pytest.fail("stream must not run after lookup miss")
     )
-    manifest = make_manifest()
+    manifest = _tmp_manifest(tmp_path)
     ctx = restore._RestoreContext(row=make_row(tmp_path), manifest=manifest, staging=tmp_path / "s", verbose=False)
     assert restore._materialize_disks(ctx, make_config(tmp_path), restore.overwrite_dest_map(manifest)) is False
 
@@ -181,115 +189,22 @@ def test_materialize_disks_returns_false_on_missing_snapshot(tmp_path: Path, mon
 def test_materialize_disks_returns_false_on_stream_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(restore, "_disk_snapshot_id", lambda *_a, **_kw: "snap-id")
     monkeypatch.setattr(restore, "_stream_disk_to_qcow2", lambda *_a, **_kw: False)
-    manifest = make_manifest()
+    manifest = _tmp_manifest(tmp_path)
     ctx = restore._RestoreContext(row=make_row(tmp_path), manifest=manifest, staging=tmp_path / "s", verbose=False)
     assert restore._materialize_disks(ctx, make_config(tmp_path), restore.overwrite_dest_map(manifest)) is False
 
 
-def test_rewrite_domain_disk_sources_rewrites_file_attr() -> None:
-    xml = (
-        "<domain type='kvm'>"
-        "  <devices>"
-        "    <disk type='file' device='disk'>"
-        "      <source file='/old/path.qcow2'/>"
-        "      <target dev='vda' bus='virtio'/>"
-        "    </disk>"
-        "  </devices>"
-        "</domain>"
+def test_materialize_disks_returns_false_when_dest_dir_uncreatable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A file sits where the destination directory must go (or the parent is a
+    # missing/read-only system path): the restore must fail with a clean event
+    # instead of an unhandled traceback.
+    (tmp_path / "imgs").write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        restore, "_disk_snapshot_id", lambda *_a, **_kw: pytest.fail("lookup must not run after mkdir failure")
     )
-    rewritten = restore._rewrite_domain_disk_sources(xml, {"vda": Path("/new/restored.qcow2")})
-    root = ET.fromstring(rewritten)
-    source = root.find(".//devices/disk/source")
-    assert source is not None
-    assert source.get("file") == "/new/restored.qcow2"
-
-
-def test_rewrite_domain_disk_sources_rewrites_dev_attr() -> None:
-    xml = (
-        "<domain type='kvm'><devices>"
-        "<disk type='block' device='disk'>"
-        "<source dev='/dev/old'/>"
-        "<target dev='vdb' bus='virtio'/>"
-        "</disk>"
-        "</devices></domain>"
-    )
-    rewritten = restore._rewrite_domain_disk_sources(xml, {"vdb": Path("/stage/vdb.qcow2")})
-    root = ET.fromstring(rewritten)
-    source = root.find(".//devices/disk/source")
-    assert source is not None
-    assert source.get("dev") == "/stage/vdb.qcow2"
-    assert "file" not in source.attrib
-
-
-def test_rewrite_domain_disk_sources_skips_disks_not_in_map() -> None:
-    """A disk whose target dev is absent from the map keeps its old source path.
-
-    This is defensive: the manifest can carry CDROM / passthrough disks
-    that we never snapshot, so we should never accidentally relocate them.
-    """
-    xml = (
-        "<domain><devices>"
-        "<disk type='file'><source file='/keep/me.iso'/><target dev='hda'/></disk>"
-        "<disk type='file'><source file='/old.qcow2'/><target dev='vda'/></disk>"
-        "</devices></domain>"
-    )
-    rewritten = restore._rewrite_domain_disk_sources(xml, {"vda": Path("/new.qcow2")})
-    root = ET.fromstring(rewritten)
-    targets = root.findall(".//disk/target")
-    srcs = root.findall(".//disk/source")
-    sources = {t.get("dev"): s for t, s in zip(targets, srcs, strict=True)}
-    assert sources["hda"].get("file") == "/keep/me.iso"
-    assert sources["vda"].get("file") == "/new.qcow2"
-
-
-def test_rewrite_domain_disk_sources_skips_disks_without_target() -> None:
-    """Disks without a ``<target>`` element are left alone (defensive)."""
-    xml = "<domain><devices><disk><source file='/x'/></disk></devices></domain>"
-    rewritten = restore._rewrite_domain_disk_sources(xml, {"vda": Path("/y")})
-    root = ET.fromstring(rewritten)
-    source = root.find(".//disk/source")
-    assert source is not None
-    assert source.get("file") == "/x"
-
-
-def test_rewrite_domain_disk_sources_skips_disks_without_target_dev() -> None:
-    """``<target>`` with no ``dev=`` attr is unusable as a key, so we skip it."""
-    xml = "<domain><devices><disk><target bus='virtio'/><source file='/x'/></disk></devices></domain>"
-    rewritten = restore._rewrite_domain_disk_sources(xml, {"vda": Path("/y")})
-    root = ET.fromstring(rewritten)
-    source = root.find(".//disk/source")
-    assert source is not None
-    assert source.get("file") == "/x"
-
-
-def test_rewrite_domain_disk_sources_skips_disks_without_source_element() -> None:
-    """A target-only disk (no ``<source>``) is left untouched."""
-    xml = "<domain><devices><disk><target dev='vda'/></disk></devices></domain>"
-    rewritten = restore._rewrite_domain_disk_sources(xml, {"vda": Path("/y")})
-    root = ET.fromstring(rewritten)
-    disk = root.find(".//disk")
-    assert disk is not None
-    assert disk.find("source") is None
-
-
-def test_rewrite_domain_disk_sources_skips_unknown_source_form() -> None:
-    """A ``<source>`` element with neither ``file=`` nor ``dev=`` is left alone.
-
-    Volume / network sources go through other libvirt code paths; we make
-    no claim about restoring them and so should not mangle them.
-    """
-    xml = (
-        "<domain><devices>"
-        "<disk type='volume'><target dev='vda'/>"
-        "<source pool='p' volume='v'/>"
-        "</disk>"
-        "</devices></domain>"
-    )
-    rewritten = restore._rewrite_domain_disk_sources(xml, {"vda": Path("/y")})
-    root = ET.fromstring(rewritten)
-    source = root.find(".//disk/source")
-    assert source is not None
-    assert source.get("pool") == "p"
-    assert source.get("volume") == "v"
-    assert "file" not in source.attrib
-    assert "dev" not in source.attrib
+    manifest = _tmp_manifest(tmp_path)
+    ctx = restore._RestoreContext(row=make_row(tmp_path), manifest=manifest, staging=tmp_path / "s", verbose=False)
+    assert restore._materialize_disks(ctx, make_config(tmp_path), restore.overwrite_dest_map(manifest)) is False
+    assert "restore destination dir creation failed" in capsys.readouterr().err

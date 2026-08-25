@@ -133,6 +133,7 @@ default `7d`) checks the local repo on its own cadence.
 - [Backup consistency and QEMU guest agent setup](docs/backup-consistency.md)
 - [Configuration reference](docs/env-vars.md)
 - [Command reference](docs/commands.md)
+- [Restore commands (restore, temp-restore)](docs/restore.md)
 - [Kopia repo layout, manual operations](docs/kopia.md)
 - [Kopia password handling, rotation, and recovery](docs/kopia-password.md)
 - [Manual restore process](docs/manual-restore.md)

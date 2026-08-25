@@ -104,6 +104,69 @@ def test_update_shared_config_errors_without_backup_path(tmp_path: Path, capsys:
     assert "BACKUP_PATH is not configured" in capsys.readouterr().err
 
 
+def test_pull_warns_when_seed_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    (backup_dir / "libvirt-backup.env").write_text("KOPIA_COMPRESSION=zstd-better\n", encoding="utf-8")
+
+    def refuse(_path: Path) -> dict[str, str]:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(config_sync, "parse_env_file", refuse)
+    # A seed that exists but cannot be read must degrade to defaults, not fail
+    # the surrounding install.
+    assert config_sync.pull_shared_config_values(_config(tmp_path, backup_dir)) is None
+    assert "shared config unreadable" in capsys.readouterr().err
+
+
+def test_seed_warns_when_publish_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    src = tmp_path / "local.env"
+    src.write_text(f"BACKUP_PATH={backup_dir}\n", encoding="utf-8")
+
+    def refuse(_dest: Path, _content: str) -> bool:
+        raise PermissionError("read-only backup tree")
+
+    monkeypatch.setattr(config_sync, "_exclusive_write", refuse)
+    # Publishing is best-effort: a read-only tree logs a warning, never raises.
+    config_sync.seed_shared_config(_config(tmp_path, backup_dir), src)
+    assert "failed to publish shared config" in capsys.readouterr().err
+
+
+def test_update_shared_config_errors_when_local_config_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    cfg = _config(tmp_path, backup_dir)  # default config path never written
+
+    assert config_sync.update_shared_config(cfg) == 1
+    assert "config file not found" in capsys.readouterr().err
+
+
+def test_update_shared_config_errors_when_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    config_path = tmp_path / "etc/libvirt-backup-system/libvirt-backup.env"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(f"BACKUP_PATH={backup_dir}\n", encoding="utf-8")
+    cfg = Config.load(config_path=str(config_path), prefix=str(tmp_path), apply_env_overrides=False)
+
+    def refuse(_dest: Path, _content: str) -> None:
+        raise PermissionError("read-only backup tree")
+
+    monkeypatch.setattr(config_sync, "_atomic_write", refuse)
+    assert config_sync.update_shared_config(cfg) == 1
+    assert "failed to publish shared config" in capsys.readouterr().err
+
+
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
@@ -149,9 +212,7 @@ def test_install_first_node_publishes_shared_config(tmp_path: Path, monkeypatch:
     assert "# HOST_ID=\n" in text
 
 
-def test_install_join_pulls_shared_config_and_install_env_wins(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_install_join_pulls_shared_config_and_install_env_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("libvirt_backup_system.installer.Path.exists", Path.exists)
     write_kopia_password_file(tmp_path)
     stub_ensure_kopia_repo(monkeypatch)

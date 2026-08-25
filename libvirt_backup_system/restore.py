@@ -164,7 +164,13 @@ def _define_domain_xml(config: Config, xml_path: Path, *, log_context: str) -> b
 def _materialize_disks(ctx: _RestoreContext, config: Config, dest_map: dict[str, Path]) -> bool:
     for disk in ctx.manifest.disks:
         dest = dest_map[disk.target]
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            event(
+                "error", "restore destination dir creation failed", target=disk.target, path=str(dest), error=str(exc)
+            )
+            return False
         snap_id = _disk_snapshot_id(config, ctx.row, disk.target)
         if snap_id is None:
             return False

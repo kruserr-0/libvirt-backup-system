@@ -261,35 +261,6 @@ different KVM host are visible alongside the local ones."""
 DU_HELP = "Show backup disk usage by host or VM."
 
 
-CHANGE_PASSWORD_HELP = "Rotate the shared kopia password on the local host."
-CHANGE_PASSWORD_DESCRIPTION = """\
-Rotate the kopia repo password the local host writes to. The same shared
-password lives on every participating host: run this command (with the same
-new value) on each host independently. Order does not matter; each host
-rotates its own local repo and password file.
-
-Pick one of:
-  --new-kopia-password=VALUE         password on the command line (visible to ps/journald)
-  --new-kopia-password-file=PATH     read from file; '-' means stdin
-  --new-kopia-password-env=VAR       read from the named environment variable
-
-Behavior:
-  1. Validate the current password file decrypts the local repo.
-  2. ``kopia repository change-password`` rewraps the master key.
-  3. Atomically replace the password file with the new value.
-
-Kopia's documented noninteractive rotation interface is
-``repository change-password --new-password=...``. Even when this command
-reads the new value from ``--new-kopia-password-file`` or
-``--new-kopia-password-env``, the final call to Kopia must pass that value
-in Kopia's argv; avoid running rotation on shared process-listing hosts.
-
-If step 3 fails after step 2 succeeds, the repo decrypts only with the new
-password but the file still holds the old one. The log line names both
-values; restore the new value into the file manually and re-run
-``doctor``."""
-
-
 KOPIA_PASSTHROUGH_HELP = "Run a raw ``kopia`` command against a managed repo (advanced)."
 KOPIA_PASSTHROUGH_DESCRIPTION = """\
 Hidden escape hatch for ad-hoc ``kopia`` invocations against a repo this

@@ -266,32 +266,15 @@ sudo libvirt-backup-system verify
 sudo libvirt-backup-system verify --include-hosts=host-a,host-b
 ```
 
-`VM_BLACKLIST` is intentionally ignored: verifying blacklisted-VM backups is
-still useful.
+`VM_BLACKLIST` is intentionally ignored: blacklisted VMs' backups still verify.
 
-## `list-restore-points`
+## `list-restore-points` / `restore` / `temp-restore`
 
-Walks every per-host repo under `BACKUP_PATH/*/kopia-repo/`, connects
-read-only with the shared token, lists `kind:meta` snapshots, and prints
-one row per (host, VM UUID, timestamp). Copy the `vm-uuid` and `timestamp`
-columns straight into `restore`.
-
-```sh
-sudo libvirt-backup-system list-restore-points
-sudo libvirt-backup-system list-restore-points | grep my-vm
-sudo libvirt-backup-system list-restore-points | less -S
-```
-
-Output columns:
-
-```
-source-host-id  vm-uuid  timestamp  run-id  consistency  vm-name
-```
-
-`source-host-id` is where the backup was taken. `run-id` joins the meta
-snapshot to its disk snapshots for diagnostics and manual operations (see
-[Kopia operations](kopia.md)). `consistency` is `filesystem`, `crash`, or
-`unknown`; see [Backup consistency](backup-consistency.md).
+`list-restore-points` lists every restorable backup run across all hosts;
+`restore` restores one by overwriting the live VM (destructive; guarded by
+confirmation and a pre-restore safety backup); `temp-restore` boots the
+backup as a throwaway clone beside the untouched original instead. See
+[Restore commands](restore.md) and each subcommand's `--help`.
 
 ## `du`
 
@@ -301,74 +284,16 @@ each `BACKUP_PATH/<host>/kopia-repo/` and a total.
 ```sh
 sudo libvirt-backup-system du
 sudo libvirt-backup-system du host-a
-sudo libvirt-backup-system du aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
 sudo libvirt-backup-system du host-a aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
 ```
 
-One drilldown argument can be either a host id or VM UUID; two arguments are
-host id then VM UUID. Drilldowns report restore-point count, latest logical
-VM size, latest consistency, and Kopia packed size; top-level remains physical
-repo usage.
-
-## `restore`
-
-Restores a single backup run identified by the `(vm_uuid, timestamp)` pair
-from `list-restore-points`. The action is automatic:
-
-- If the backup was taken on this host **and** a libvirt domain with that
-  UUID exists locally, the VM is shut down, undefined, and redefined from
-  the backup (in-place overwrite).
-- Otherwise the VM is staged and redefined from the backup XML on this host
-  (turnkey one-click recovery on a different host or after the local VM has
-  been removed).
-
-```sh
-sudo libvirt-backup-system restore <vm-uuid> <timestamp>
-sudo libvirt-backup-system restore aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa 20260507T101112
-```
-
-Pass `--host-id <source-host-id>` or `--run-id <run-id>` only when duplicate
-rows share the same `(vm-uuid, timestamp)`. The timestamp is the exact
-per-run target (no rounding, no closest-match). For same-host restores where
-a local domain with the same UUID exists, disks are restored to temporary
-sibling files first, then the VM is shut down, undefined, and the temporary
-files replace the original per-disk source paths. Cross-host or fresh
-restores write qcow2s under
-`/var/lib/libvirt-backup-system/restore/<uuid>-<timestamp>/` and rewrite the
-restored domain XML to those staged paths.
-
-Internally each disk snapshot is piped through `qemu-img convert -f raw -O
-qcow2 -S 4096` to produce a sparse qcow2 on the destination. The meta
-snapshot is materialized to a tmp dir so the manifest's domain XML can be
-read into `virsh define`. By default, restore prints only summary
-success/error events; pass `-v`/`--verbose` to stream per-disk progress.
-
-### Cross-host recovery
-
-`list-restore-points` walks every host directory under `BACKUP_PATH`, not
-just the current `HOST_ID`, so a recovery host that mounted the backup tree
-sees every host's snapshots. `restore` follows the same path: it picks up
-the snapshot from whichever host's repo contains a matching `(uuid,
-timestamp)`. When that host does not match the local one (or no local VM
-with that UUID exists), the turnkey define path runs.
-
-The shared token decrypts every host's repo, so cross-host restore is the
-same command as same-host restore unless duplicate restore points require a
-`--host-id` or `--run-id` disambiguator.
-
-### How snapshots are tagged
-
-`restore` resolves a meta snapshot by `(vm-uuid, timestamp)`, reads the
-manifest, then looks up each disk snapshot by `run-id + disk=<target>`.
-See [Kopia operations](kopia.md#tag-schema) for the full tag schema,
-including consistency metadata.
+One drilldown argument is a host id or VM UUID; two are host id then VM UUID.
+Drilldowns report restore-point count, latest logical VM size, latest
+consistency, and Kopia packed size; top-level remains physical repo usage.
 
 ## Retention
 
 Retention is enforced by the kopia global policy
 (`KEEP_LATEST/HOURLY/DAILY/WEEKLY/MONTHLY/ANNUAL`), refreshed from the env
-file on every `start`. Defaults keep the latest 8 snapshots plus hourly points
-for 24h and daily points for one year. The maintenance timer
-(`KOPIA_MAINTENANCE_INTERVAL`, default `24h`) prunes expired snapshots and
-compacts the repo. See [Kopia operations](kopia.md#maintenance) for manual
-maintenance commands.
+file on every `start`; see [Kopia operations](kopia.md#maintenance) for the
+maintenance timers that prune and compact the repos.

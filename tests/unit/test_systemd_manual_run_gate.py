@@ -4,20 +4,16 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from libvirt_backup_system.systemd_units import (
-    DISPATCH_OPT_OUT_ENV,
-    RUN_UNIT_NAME,
-    TIMER_UNIT_NAME,
-    dispatch_via_systemd,
-)
+from libvirt_backup_system.systemd_dispatch import DISPATCH_OPT_OUT_ENV, dispatch_via_systemd
+from libvirt_backup_system.systemd_units import RUN_UNIT_NAME, TIMER_UNIT_NAME
 
 
 def _fake_systemd_host(tmp_path: Path, monkeypatch) -> Path:
     systemd_dir = tmp_path / "etc/systemd/system"
     systemd_dir.mkdir(parents=True)
     fake_prefixed = lambda path, root: tmp_path / str(path).lstrip("/")  # noqa: E731
-    monkeypatch.setattr("libvirt_backup_system.systemd_units.root_prefix", lambda prefix=None: Path("/"))
-    monkeypatch.setattr("libvirt_backup_system.systemd_units.prefixed", fake_prefixed)
+    monkeypatch.setattr("libvirt_backup_system.systemd_dispatch.root_prefix", lambda prefix=None: Path("/"))
+    monkeypatch.setattr("libvirt_backup_system.systemd_dispatch.prefixed", fake_prefixed)
     monkeypatch.setattr("libvirt_backup_system.systemd_run_gate.prefixed", fake_prefixed)
     monkeypatch.setattr("libvirt_backup_system.systemd_units.shutil.which", lambda binary: "/bin/systemctl")
     original_exists = Path.exists
