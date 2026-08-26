@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 
 from . import cli_help, cli_help_password, cli_help_restore
+from .cli_parser_install import add_install_parser
 from .cli_parser_temp_restore import add_temp_restore_parser
 from .kopia_password import PasswordSpec
 
@@ -54,29 +55,6 @@ def password_spec_from_args(args: argparse.Namespace, *, prefix: str) -> Passwor
     )
 
 
-def _add_install_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:  # pyright: ignore[reportPrivateUsage]
-    install_parser = _add_subparser(
-        sub, "install", help_text=cli_help.INSTALL_HELP, description=cli_help.INSTALL_DESCRIPTION
-    )
-    _add_password_flags(install_parser, prefix="")
-    install_parser.add_argument(
-        "--acknowledge-password-loss",
-        action="store_true",
-        help=(
-            "Required on first install: confirms this password has been stored outside "
-            "libvirt-backup-system and that losing it makes all backups unrecoverable."
-        ),
-    )
-    install_parser.add_argument(
-        "--non-interactive",
-        action="store_true",
-        help=(
-            "Never prompt (for automation tooling). Missing system dependencies fail the "
-            "install with a copy-paste apt command instead of offering to install them."
-        ),
-    )
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="libvirt-backup-system",
@@ -109,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="<subcommand>",
     )
 
-    _add_install_parser(sub)
+    add_install_parser(sub, add_subparser=_add_subparser, add_password_flags=_add_password_flags)
 
     _add_subparser(sub, "add-node", help_text=cli_help.ADD_NODE_HELP, description=cli_help.ADD_NODE_DESCRIPTION)
     _add_subparser(sub, "show-token", help_text=cli_help.SHOW_TOKEN_HELP)

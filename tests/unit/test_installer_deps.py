@@ -119,15 +119,36 @@ def test_dependency_hint_supported(tmp_path: Path) -> None:
 def test_dependency_hint_newer_release(tmp_path: Path) -> None:
     _write_os_release(tmp_path, 'ID=debian\nVERSION_ID=99\nPRETTY_NAME="Debian GNU/Linux 99"\n')
     hint = installer_deps.dependency_hint(["virsh"], tmp_path)
-    assert "not a release this tool was tested against" in hint
+    assert "not a version this tool was tested against" in hint
     assert "apt-get install -y libvirt-clients" in hint
-    assert "ask an AI assistant" in hint
+    assert "paste this into Google or ChatGPT" in hint
+    assert "'How do I install the packages that provide virsh on Debian GNU/Linux 99?'" in hint
 
 
 def test_dependency_hint_unknown_os(tmp_path: Path) -> None:
     hint = installer_deps.dependency_hint(["virsh"], tmp_path)
-    assert hint.startswith("this OS is not a known Debian/Ubuntu release")
-    assert "virsh" in hint
+    assert hint.startswith("this OS (unknown) is not a known Debian/Ubuntu release")
+    assert "'How do I install the packages that provide virsh on my operating system?'" in hint
+
+
+def test_os_release_label_variants() -> None:
+    # pretty_name that already carries the version is used verbatim.
+    assert installer_deps.os_release_label(DEBIAN12) == "Debian GNU/Linux 12 (bookworm)"
+    # pretty_name without the numeric version gets it appended.
+    no_version = OsRelease("debian", "99", "Debian GNU/Linux forky/sid")
+    assert installer_deps.os_release_label(no_version) == "Debian GNU/Linux forky/sid (version 99)"
+    # No pretty_name falls back to id + version; nothing at all -> unknown.
+    assert installer_deps.os_release_label(OsRelease("debian", "99", "")) == "debian 99"
+    assert installer_deps.os_release_label(OsRelease("debian", "", "")) == "debian"
+    assert installer_deps.os_release_label(MACOS) == "unknown"
+
+
+def test_search_prompt_names_deps_and_version() -> None:
+    prompt = installer_deps.search_prompt(DEBIAN99, ["virsh", "nbdcopy"])
+    assert prompt == ("How do I install the packages that provide virsh, nbdcopy on Debian GNU/Linux 99 (futuristic)?")
+    assert installer_deps.search_prompt(MACOS, ["virsh"]) == (
+        "How do I install the packages that provide virsh on my operating system?"
+    )
 
 
 def test_required_binary_failures_appends_hints(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -164,15 +185,19 @@ def test_dependency_error_lines_supported() -> None:
 
 def test_dependency_error_lines_newer_release() -> None:
     text = "\n".join(installer_deps.dependency_error_lines(DEBIAN99, ["virsh"]))
-    assert "not one this" in text
+    assert "Detected OS: Debian GNU/Linux 99 (futuristic)" in text
+    assert "Your debian version (99) is not one this" in text
     assert "sudo apt-get update && sudo apt-get install -y libvirt-clients" in text
-    assert "ask" in text and "AI assistant" in text and "Google/ChatGPT" in text
+    assert "copy-paste this" in text and "Google or ChatGPT" in text
+    assert "  How do I install the packages that provide virsh on Debian GNU/Linux 99 (futuristic)?" in text
 
 
 def test_dependency_error_lines_unknown_os() -> None:
     text = "\n".join(installer_deps.dependency_error_lines(MACOS, ["virsh"]))
+    assert "Detected OS: unknown" in text
     assert "does not look like a Debian or Ubuntu system" in text
-    assert "Google/ChatGPT" in text
+    assert "Google or ChatGPT" in text
+    assert "  How do I install the packages that provide virsh on my operating system?" in text
     assert "apt-get install" not in text
 
 
@@ -221,13 +246,13 @@ def _capture_run_visible(monkeypatch: pytest.MonkeyPatch, fail_on: str | None = 
 
 def test_apt_install_as_root_skips_sudo(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _capture_run_visible(monkeypatch)
-    assert installer_deps._apt_install(["libnbd-bin"], as_root=True)
+    assert installer_deps._apt_install(["libnbd-bin"], as_root=True, interactive=True)
     assert calls == [["apt-get", "update"], ["apt-get", "install", "-y", "libnbd-bin"]]
 
 
 def test_apt_install_non_root_uses_and_drops_sudo(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _capture_run_visible(monkeypatch)
-    assert installer_deps._apt_install(["libnbd-bin"], as_root=False)
+    assert installer_deps._apt_install(["libnbd-bin"], as_root=False, interactive=True)
     assert calls == [
         ["sudo", "-v"],
         ["sudo", "apt-get", "update"],
@@ -238,12 +263,12 @@ def test_apt_install_non_root_uses_and_drops_sudo(monkeypatch: pytest.MonkeyPatc
 
 def test_apt_install_sudo_auth_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _capture_run_visible(monkeypatch, fail_on="-v")
-    assert not installer_deps._apt_install(["libnbd-bin"], as_root=False)
+    assert not installer_deps._apt_install(["libnbd-bin"], as_root=False, interactive=True)
     assert calls == [["sudo", "-v"]]
 
 
 def test_apt_install_failure_still_drops_sudo(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _capture_run_visible(monkeypatch, fail_on="update")
-    assert not installer_deps._apt_install(["libnbd-bin"], as_root=False)
+    assert not installer_deps._apt_install(["libnbd-bin"], as_root=False, interactive=True)
     # apt-get update failed, install is skipped, but sudo -k still runs.
     assert calls == [["sudo", "-v"], ["sudo", "apt-get", "update"], ["sudo", "-k"]]

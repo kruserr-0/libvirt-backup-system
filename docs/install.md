@@ -14,7 +14,7 @@ release. `check` re-validates the same binaries on every run, including that
 each one actually executes.
 
 See [System dependencies](system-deps.md) for the full behavior, the
-`--non-interactive` flag, and the per-release apt commands:
+`-y` / `--non-interactive` flags, and the per-release apt commands:
 
 ```sh
 sudo apt-get update
@@ -50,15 +50,9 @@ Save the generated token in a password manager:
 sudo libvirt-backup-system show-token
 ```
 
-To join another host later, use `add-node` on an installed host. It prints a
-pasteable install command that carries the same `BACKUP_PATH` and token to the
-new host:
-
-```sh
-sudo libvirt-backup-system add-node
-```
-
-See [Joining additional hosts](joining-hosts.md) for the full flow.
+To join another host later, run `sudo libvirt-backup-system add-node` on an
+installed host — it prints a pasteable install command carrying the same
+`BACKUP_PATH` and token. See [Joining additional hosts](joining-hosts.md).
 
 Operators who need to provide their own token can still use the explicit
 password flags. These paths still require `--acknowledge-password-loss` before
@@ -135,6 +129,7 @@ The installer creates:
 - `/etc/libvirt-backup-system/libvirt-backup.env`
 - `/etc/libvirt-backup-system/kopia.pw` (mode 600 root-owned)
 - `/usr/share/fish/vendor_completions.d/libvirt-backup-system.fish`
+- `/usr/share/bash-completion/completions/libvirt-backup-system`
 - `/var/lib/libvirt-backup-system/kopia-configs/` (per-repo Kopia config
   files)
 - `/var/cache/libvirt-backup-system/kopia/` (Kopia chunk cache)
@@ -153,15 +148,17 @@ When `BACKUP_PATH` is configured, it also creates:
 
 ### Shell completion
 
-The fish completion file is auto-installed by `install` and removed by
-`uninstall`; fish picks it up from `/usr/share/fish/vendor_completions.d/`
-without any `source` line in `config.fish`. TAB at any subcommand position
-offers the available subcommands and flags. The completion file ships as
-package data inside `libvirt-backup-system` itself, so the install path needs
-no PyPI access — it is a plain file copy.
-
-If fish is not installed the file is still written; it just sits unused until
-the operator installs fish.
+Bash and fish completion files are auto-installed by `install` and removed
+by `uninstall`. Fish picks its file up from
+`/usr/share/fish/vendor_completions.d/` without any `source` line in
+`config.fish`; bash loads its file on first TAB from
+`/usr/share/bash-completion/completions/` via the standard bash-completion
+package (which also makes `sudo libvirt-backup-system <TAB>` work). TAB at
+any subcommand position offers the available subcommands and flags in both
+shells; bash completes values bare since it cannot render the descriptions
+fish shows. Both files ship as package data inside `libvirt-backup-system`
+itself — plain file copies, no PyPI access needed. If a shell is not
+installed its file just sits unused.
 
 #### Dynamic restore completion
 

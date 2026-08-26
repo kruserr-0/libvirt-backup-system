@@ -70,11 +70,15 @@ hosts](docs/joining-hosts.md).
 The first node publishes its env config to `BACKUP_PATH/libvirt-backup.env` as
 a shared seed; joining nodes pull it as their initial config (retention,
 splitter, schedule, NFS policy) instead of starting from defaults. After
-joining, each host's config is independent. Run `update-config` to make a
-host's current config the template that future joins inherit:
+joining, each host's config is independent. **Run `update-config` after every
+config change** so the seed (and the recorded fstab entry) stays current and
+the next join inherits your real settings, not stale ones — see
+[`update-config` in depth](docs/update-config.md):
 
 ```sh
-sudo libvirt-backup-system update-config
+sudoedit /etc/libvirt-backup-system/libvirt-backup.env
+sudo libvirt-backup-system start          # apply the change locally
+sudo libvirt-backup-system update-config  # publish it for the cluster
 ```
 
 ## Basic use
@@ -143,6 +147,7 @@ default `7d`) checks the local repo on its own cadence.
 - [Install and prerequisites](docs/install.md)
 - [System dependencies](docs/system-deps.md)
 - [Joining additional hosts](docs/joining-hosts.md)
+- [`update-config`: publishing config changes](docs/update-config.md)
 - [Backup consistency and QEMU guest agent setup](docs/backup-consistency.md)
 - [Configuration reference](docs/env-vars.md)
 - [Command reference](docs/commands.md)

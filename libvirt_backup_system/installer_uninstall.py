@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 from . import kopia_repo
+from .bash_completion import remove_bash_completion
 from .config import Config, prefixed
 from .fish_completion import remove_fish_completion
 from .logging_json import event
@@ -47,6 +48,7 @@ def remove_installed_files(root: Path) -> bool:
             event("error", "failed to remove file", path=str(path), error=str(exc))
             ok = False
     ok = remove_fish_completion(root) and ok
+    ok = remove_bash_completion(root) and ok
     opt_dir = prefixed("/opt/libvirt-backup-system", root)
     if opt_dir.exists():
         if (opt_dir / ".git").exists():

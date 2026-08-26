@@ -14,21 +14,50 @@ the tool handles them.
   missing binaries onto the matching apt packages.
 - Running interactively on a known release, it offers to run
   `apt-get update && apt-get install -y ...` for you after an explicit
-  confirmation. When not already root, `sudo` asks for your password on the
+  confirmation; `install -y`/`--yes` answers that confirmation
+  automatically. When not already root, `sudo` asks for your password on the
   terminal; the credentials are used only for those apt-get commands and are
   dropped again (`sudo -k`) right after.
-- If you decline, pass `--non-interactive` (for automation tooling), or the
-  release is unknown, the install aborts **before anything is modified** and
-  prints a copy-paste command instead. The tool never installs OS packages
-  without your consent and never side-loads packages built for a different
-  OS release. (Earlier versions side-loaded Debian-bookworm `.deb` files for
-  `nbdcopy`, which could leave a foreign, half-broken binary on other
-  releases; that path has been removed.)
+- For automation tooling, `--non-interactive` never prompts. Combined with
+  `-y` it still attempts the apt install: as root it runs apt-get directly;
+  as a normal user it uses `sudo -n` and **auto-skips the attempt** when
+  passwordless sudo is not available (instead of hanging on a password
+  prompt), then fails with the copy-paste command. `--non-interactive`
+  without `-y` never touches apt — consent to install must be explicit.
+- If you decline, the attempt was skipped, or the release is unknown, the
+  install aborts **before anything is modified** and prints a copy-paste
+  command instead. The tool never installs OS packages without your consent
+  and never side-loads packages built for a different OS release. (Earlier
+  versions side-loaded Debian-bookworm `.deb` files for `nbdcopy`, which
+  could leave a foreign, half-broken binary on other releases; that path
+  has been removed.)
 - On a Debian/Ubuntu release newer than the ones this tool knows about, the
-  error still prints the command that worked on earlier releases, and tells
-  you to search the web or ask an AI assistant (Google/ChatGPT) how to
-  install `virsh`, `qemu-nbd`, `qemu-img`, and `nbdcopy` on your release if
-  the package names have changed.
+  error prints your detected OS version, the command that worked on earlier
+  releases, and a ready-made question — naming the missing binaries and
+  your exact version — that you can paste straight into Google or ChatGPT
+  to get the install steps, e.g.:
+
+  ```text
+  How do I install the packages that provide virsh, nbdcopy on Debian GNU/Linux 14 (forky)?
+  ```
+
+Dependencies already on the system are never installed again — apt only ever
+runs for the missing or broken ones.
+
+## Repairing broken dependencies: `--reinstall-deps`
+
+If the dependencies look present but misbehave for whatever reason, force a
+clean reinstall of every dependency package (and a re-extract of the pinned
+`kopia` binary), even when they look healthy:
+
+```sh
+sudo libvirt-backup-system install --reinstall-deps
+```
+
+This runs `apt-get install --reinstall -y libnbd-bin libvirt-clients
+qemu-utils` after the usual confirmation (`-y` to skip it;
+`--non-interactive -y --reinstall-deps` for automation, which needs root or
+passwordless sudo).
 
 ## What `check` does
 

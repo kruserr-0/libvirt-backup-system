@@ -82,7 +82,7 @@ turnkey decision, the staging directory layout, and the safety guarantees."""
 UNINSTALL_HELP = "Remove installed files. Config/state/logs/backups are kept unless --purge-* is passed."
 UNINSTALL_DESCRIPTION = """\
 Disable timers, stop services, and remove the installed wrapper, opt package
-copy, systemd unit files, and fish completion script. If the opt path is itself
+copy, systemd unit files, and bash/fish completion scripts. If the opt path is itself
 a Git checkout, the checkout is preserved. Config, state, logs, and on-disk
 backups are preserved by default so an accidental uninstall does not destroy
 data; use the --purge-* flags to remove them explicitly.

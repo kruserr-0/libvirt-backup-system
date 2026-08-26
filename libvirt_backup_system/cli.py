@@ -154,6 +154,8 @@ def _command_before_config(args: argparse.Namespace) -> int | None:
             config_path=args.config,
             password_spec=_password_spec_from_args(args, prefix=""),
             non_interactive=args.non_interactive,
+            assume_yes=args.yes,
+            reinstall_deps=args.reinstall_deps,
         )
     if args.command == "change-password":
         return _change_password_command(args)

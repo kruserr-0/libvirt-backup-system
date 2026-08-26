@@ -90,7 +90,7 @@ def _stub_install_binaries(monkeypatch: pytest.MonkeyPatch) -> None:
     through monkeypatched ``urllib.request`` / ``shell.run``.
     """
 
-    def fake_install_kopia(prefix: object = None) -> None:
+    def fake_install_kopia(prefix: object = None, *, force: bool = False) -> None:
         return None
 
     monkeypatch.setattr("libvirt_backup_system.installer.install_kopia", fake_install_kopia)

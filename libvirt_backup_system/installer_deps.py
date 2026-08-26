@@ -25,55 +25,25 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Iterable
-from dataclasses import dataclass
 from pathlib import Path
 
-from .config import parse_env_file, prefixed
+from .installer_deps_os import (
+    APT_PACKAGE_FOR_BINARY,
+    KNOWN_APT_RELEASES,
+    SYSTEM_DEP_BINARIES,
+    OsRelease,
+    apt_install_command,
+    apt_packages,
+    detect_os,
+    os_release_label,
+    release_supported,
+    search_prompt,
+)
 from .logging_json import event
 from .shell import CommandError, run
 
-# Binaries that must come from OS packages (kopia is pin-installed by the
-# installer itself; df ships with coreutils on every supported release).
-SYSTEM_DEP_BINARIES = ("virsh", "qemu-nbd", "qemu-img", "nbdcopy")
-APT_PACKAGE_FOR_BINARY = {
-    "virsh": "libvirt-clients",
-    "qemu-nbd": "qemu-utils",
-    "qemu-img": "qemu-utils",
-    "nbdcopy": "libnbd-bin",
-}
-# Releases the apt package names above were verified against. A release
-# missing from this map still gets the command printed as a best guess, plus
-# a pointer to research the right packages for that release.
-KNOWN_APT_RELEASES: dict[str, tuple[str, ...]] = {
-    "debian": ("11", "12", "13"),
-    "ubuntu": ("20.04", "22.04", "24.04", "24.10", "25.04"),
-}
 KOPIA_INSTALL_HINT = "kopia is installed by 'libvirt-backup-system install'; re-run install"
 BINARY_PROBE_TIMEOUT_SECONDS = 10
-
-
-@dataclass(frozen=True)
-class OsRelease:
-    os_id: str
-    version_id: str
-    pretty_name: str
-
-
-def detect_os(prefix: Path | None = None) -> OsRelease:
-    path = prefixed("/etc/os-release", prefix if prefix is not None else Path("/"))
-    try:
-        values = parse_env_file(path)
-    except OSError:
-        values = {}
-    return OsRelease(
-        os_id=values.get("ID", "").strip().lower(),
-        version_id=values.get("VERSION_ID", "").strip(),
-        pretty_name=values.get("PRETTY_NAME", "").strip(),
-    )
-
-
-def release_supported(os_release: OsRelease) -> bool:
-    return os_release.version_id in KNOWN_APT_RELEASES.get(os_release.os_id, ())
 
 
 def _binary_runs(binary_path: str) -> bool:
@@ -103,14 +73,6 @@ def missing_system_deps() -> list[str]:
     return [binary for binary in SYSTEM_DEP_BINARIES if binary_failure(binary) is not None]
 
 
-def apt_packages(binaries: Iterable[str]) -> list[str]:
-    return sorted({APT_PACKAGE_FOR_BINARY[binary] for binary in binaries if binary in APT_PACKAGE_FOR_BINARY})
-
-
-def apt_install_command(binaries: Iterable[str]) -> str:
-    return "sudo apt-get update && sudo apt-get install -y " + " ".join(apt_packages(binaries))
-
-
 def dependency_hint(missing: list[str], prefix: Path | None = None) -> str:
     """Single-line remediation hint for preflight failure lists."""
     os_release = detect_os(prefix)
@@ -119,13 +81,13 @@ def dependency_hint(missing: list[str], prefix: Path | None = None) -> str:
         return f"install the missing packages with: {apt_install_command(missing)}"
     if os_release.os_id in KNOWN_APT_RELEASES:
         return (
-            f"{os_release.pretty_name or os_release.os_id} is not a release this tool was tested against; "
-            f"try: {apt_install_command(missing)} -- if the package names changed on your release, search "
-            f"the web or ask an AI assistant (Google/ChatGPT) how to install {named} on it"
+            f"{os_release_label(os_release)} is not a version this tool was tested against; "
+            f"try: {apt_install_command(missing)} -- if the package names changed on your version, paste "
+            f"this into Google or ChatGPT: {search_prompt(os_release, missing)!r}"
         )
     return (
-        "this OS is not a known Debian/Ubuntu release; search the web or ask an AI assistant "
-        f"(Google/ChatGPT) how to install {named} on it"
+        f"this OS ({os_release_label(os_release)}) is not a known Debian/Ubuntu release; paste this into "
+        f"Google or ChatGPT to get the install steps for {named}: {search_prompt(os_release, missing)!r}"
     )
 
 
@@ -155,7 +117,7 @@ def dependency_error_lines(os_release: OsRelease, missing: list[str]) -> list[st
     lines = [
         "",
         f"Missing system dependencies: {named}",
-        f"Detected OS: {os_release.pretty_name or os_release.os_id or 'unknown'}",
+        f"Detected OS: {os_release_label(os_release)}",
         "",
     ]
     if release_supported(os_release):
@@ -164,26 +126,31 @@ def dependency_error_lines(os_release: OsRelease, missing: list[str]) -> list[st
             "",
             f"  {apt_install_command(missing)}",
             "",
-            "then re-run this command.",
+            "then re-run this command. Or re-run install with -y to let it run",
+            "apt-get for you (--non-interactive -y for automation tooling; that",
+            "needs root or passwordless sudo and is skipped otherwise).",
         ]
     elif os_release.os_id in KNOWN_APT_RELEASES:
         known = ", ".join(KNOWN_APT_RELEASES[os_release.os_id])
         lines += [
-            f"This {os_release.os_id} release ({os_release.version_id or 'unknown version'}) is not one this",
+            f"Your {os_release.os_id} version ({os_release.version_id or 'unknown version'}) is not one this",
             f"tool was tested against (known: {known}). The command below worked on",
-            "those releases and is likely still correct:",
+            "those versions and is likely still correct:",
             "",
             f"  {apt_install_command(missing)}",
             "",
-            "If the package names have changed on your release, search the web or ask",
-            f"an AI assistant (Google/ChatGPT) how to install {', '.join(missing)}",
-            f"on {os_release.pretty_name or os_release.os_id}.",
+            "If the package names have changed on your version, copy-paste this",
+            "question into Google or ChatGPT to get the install steps:",
+            "",
+            f"  {search_prompt(os_release, missing)}",
         ]
     else:
         lines += [
             "This does not look like a Debian or Ubuntu system, so no install command",
-            "can be suggested. Search the web or ask an AI assistant (Google/ChatGPT)",
-            f"how to install {', '.join(missing)} on your OS, then re-run this command.",
+            "can be suggested. Copy-paste this question into Google or ChatGPT to",
+            "get the install steps for your OS, then re-run this command:",
+            "",
+            f"  {search_prompt(os_release, missing)}",
         ]
     lines += [
         "",
@@ -226,14 +193,34 @@ def _run_visible(args: list[str]) -> int:
     return completed.returncode
 
 
-def _apt_install(packages: list[str], *, as_root: bool) -> bool:
-    sudo_prefix = [] if as_root else ["sudo"]
-    if not as_root and _run_visible(["sudo", "-v"]) != 0:
-        event("error", "sudo authentication failed; cannot install system dependencies")
-        return False
+def _apt_install(packages: list[str], *, as_root: bool, interactive: bool, reinstall: bool = False) -> bool:
+    if as_root:
+        sudo_prefix: list[str] = []
+    elif interactive:
+        # sudo prompts for its password on the TTY; the credentials are used
+        # only for the apt-get commands below and dropped again afterwards.
+        sudo_prefix = ["sudo"]
+        if _run_visible(["sudo", "-v"]) != 0:
+            event("error", "sudo authentication failed; cannot install system dependencies")
+            return False
+    else:
+        # Non-interactive (--non-interactive -y): only proceed when sudo works
+        # without a password (NOPASSWD or cached credentials); otherwise skip
+        # the automatic install attempt instead of hanging on a prompt.
+        sudo_prefix = ["sudo", "-n"]
+        if _run_visible(["sudo", "-n", "-v"]) != 0:
+            event("info", "sudo is not available without a password; skipping automatic dependency install")
+            return False
+    # DEBIAN_FRONTEND=noninteractive keeps debconf from prompting when no
+    # operator is watching; interactive runs keep the default frontend.
+    env_prefix = [] if interactive else ["env", "DEBIAN_FRONTEND=noninteractive"]
+    reinstall_args = ["--reinstall"] if reinstall else []
     try:
-        ok = _run_visible([*sudo_prefix, "apt-get", "update"]) == 0
-        ok = ok and _run_visible([*sudo_prefix, "apt-get", "install", "-y", *packages]) == 0
+        ok = _run_visible([*sudo_prefix, *env_prefix, "apt-get", "update"]) == 0
+        ok = (
+            ok
+            and _run_visible([*sudo_prefix, *env_prefix, "apt-get", "install", "-y", *reinstall_args, *packages]) == 0
+        )
     finally:
         if not as_root:
             # Drop the cached sudo credentials: they were requested for the
@@ -244,11 +231,26 @@ def _apt_install(packages: list[str], *, as_root: bool) -> bool:
     return ok
 
 
-def ensure_system_deps(root: Path, *, non_interactive: bool = False) -> int:
+def ensure_system_deps(
+    root: Path,
+    *,
+    non_interactive: bool = False,
+    assume_yes: bool = False,
+    reinstall: bool = False,
+) -> int:
     """Gate install on the system dependencies; return a process exit code.
 
     Runs before anything is mutated so a missing dependency aborts the whole
     install up front instead of leaving a half-installed system behind.
+    Dependencies already on the system are never installed again — apt only
+    ever runs for the missing/broken ones.
+
+    ``assume_yes`` (install ``-y``) answers the apt-install confirmation
+    automatically; combined with ``non_interactive`` it lets automation
+    tooling apt-install missing dependencies when running as root or with
+    passwordless sudo (skipped gracefully otherwise). ``reinstall``
+    (install ``--reinstall-deps``) forces ``apt-get install --reinstall`` of
+    ALL dependency packages, present or not, to repair a broken install.
     """
     if root != Path("/"):
         # Sandboxed installs (tests, --prefix) must not probe or mutate the
@@ -256,34 +258,42 @@ def ensure_system_deps(root: Path, *, non_interactive: bool = False) -> int:
         event("info", "system dependency check skipped for sandboxed prefix", root_prefix=str(root))
         return 0
     missing = missing_system_deps()
-    if not missing:
+    if not missing and not reinstall:
         return 0
+    targets = list(SYSTEM_DEP_BINARIES) if reinstall else missing
     os_release = detect_os(root)
-    event("error", "missing system dependencies", binaries=",".join(missing))
+    if missing:
+        event("error", "missing system dependencies", binaries=",".join(missing))
+    else:
+        event("info", "reinstalling system dependencies on request", binaries=",".join(targets))
     interactive = _stdin_is_tty() and not non_interactive
-    if not interactive or not release_supported(os_release):
-        _print_lines(dependency_error_lines(os_release, missing))
+    may_install = (interactive or assume_yes) and release_supported(os_release)
+    if not may_install:
+        _print_lines(dependency_error_lines(os_release, targets))
         return 1
-    packages = apt_packages(missing)
+    packages = apt_packages(targets)
+    verb = "reinstalled" if reinstall else "installed"
     _print_lines(
         [
             "",
-            f"Missing system dependencies: {', '.join(missing)}",
-            f"Detected OS: {os_release.pretty_name or os_release.os_id}",
-            f"They can be installed now with: apt-get update && apt-get install -y {' '.join(packages)}",
+            f"{'Reinstalling' if reinstall else 'Missing'} system dependencies: {', '.join(targets)}",
+            f"Detected OS: {os_release_label(os_release)}",
+            f"They can be {verb} now with: apt-get update && apt-get install -y {' '.join(packages)}",
         ]
     )
-    if not _confirm("Install these packages now via apt-get? [y/N] "):
-        _print_lines(dependency_error_lines(os_release, missing))
+    if not assume_yes and not _confirm(
+        f"{'Reinstall' if reinstall else 'Install'} these packages now via apt-get? [y/N] "
+    ):
+        _print_lines(dependency_error_lines(os_release, targets))
         return 1
     as_root = hasattr(os, "geteuid") and os.geteuid() == 0
-    if not _apt_install(packages, as_root=as_root):
-        _print_lines(dependency_error_lines(os_release, missing))
+    if not _apt_install(packages, as_root=as_root, interactive=interactive, reinstall=reinstall):
+        _print_lines(dependency_error_lines(os_release, targets))
         return 1
     still_missing = missing_system_deps()
     if still_missing:
         event("error", "system dependencies still missing after apt-get install", binaries=",".join(still_missing))
         _print_lines(dependency_error_lines(os_release, still_missing))
         return 1
-    event("info", "installed system dependencies", packages=" ".join(packages))
+    event("info", f"{verb} system dependencies", packages=" ".join(packages))
     return 0

@@ -255,7 +255,7 @@ def test_install_hard_fails_when_pinned_binary_install_fails(
     # with a no-op; here we override it to raise so we can confirm the
     # whole install short-circuits BEFORE the password / systemd-unit
     # steps run.
-    def boom(prefix: object = None) -> None:
+    def boom(prefix: object = None, *, force: bool = False) -> None:
         raise BinaryInstallError("simulated download failure")
 
     monkeypatch.setattr("libvirt_backup_system.installer.install_kopia", boom)

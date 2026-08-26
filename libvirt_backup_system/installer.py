@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from . import config_sync, installer_deps, kopia_password, kopia_repo, mount_consistency, preflight
+from .bash_completion import install_bash_completion
 from .config import Config, default_config_path, prefixed, root_prefix
 from .fish_completion import install_fish_completion
 from .installer_binaries import BinaryInstallError, install_kopia
@@ -43,13 +44,20 @@ def install(
     config_path: str | None = None,
     password_spec: kopia_password.PasswordSpec | None = None,
     non_interactive: bool = False,
+    assume_yes: bool = False,
+    reinstall_deps: bool = False,
 ) -> int:
     root = root_prefix(prefix)
     # System dependencies gate the whole install and run before anything is
     # mutated: a missing dependency aborts cleanly with a copy-paste install
     # command for the detected OS release instead of leaving a half-installed
     # system behind.
-    deps_code = installer_deps.ensure_system_deps(root, non_interactive=non_interactive)
+    deps_code = installer_deps.ensure_system_deps(
+        root,
+        non_interactive=non_interactive,
+        assume_yes=assume_yes,
+        reinstall=reinstall_deps,
+    )
     if deps_code != 0:
         return deps_code
     try:
@@ -91,7 +99,7 @@ def install(
             binaries_installed = False
             if password_required or password_supplied or password_missing:
                 if _password_validation_needs_kopia(cfg):
-                    binary_code = _install_pinned_binaries(root)
+                    binary_code = _install_pinned_binaries(root, force=reinstall_deps)
                     if binary_code != 0:
                         return binary_code
                     binaries_installed = True
@@ -99,7 +107,7 @@ def install(
                 if password_code != 0:
                     return password_code
             if not binaries_installed:
-                binary_code = _install_pinned_binaries(root)
+                binary_code = _install_pinned_binaries(root, force=reinstall_deps)
                 if binary_code != 0:
                     return binary_code
             install_code = _install_locked(root, resolved_config, cfg, joining=joining)
@@ -120,9 +128,9 @@ def install(
         return 1
 
 
-def _install_pinned_binaries(root: Path) -> int:
+def _install_pinned_binaries(root: Path, *, force: bool = False) -> int:
     try:
-        install_kopia(prefix=root)
+        install_kopia(prefix=root, force=force)
     except BinaryInstallError as exc:
         event("error", "pinned binary install failed", error=str(exc))
         return 1
@@ -197,6 +205,7 @@ def _install_locked(root: Path, resolved_config: Path, cfg: Config, *, joining: 
     _install_package(package_src, package_dst)
     _write_wrapper(bin_path, root, opt_dir)
     install_fish_completion(root)
+    install_bash_completion(root)
 
     resolved_config.parent.mkdir(parents=True, exist_ok=True)
     if not config_existed:

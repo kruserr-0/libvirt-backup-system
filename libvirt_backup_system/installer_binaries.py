@@ -110,23 +110,26 @@ def _kopia_installed_version(kopia_path: Path) -> str | None:
     return parts[0] if parts else None
 
 
-def install_kopia(prefix: Path | None = None) -> None:
+def install_kopia(prefix: Path | None = None, *, force: bool = False) -> None:
     """Install kopia at the pinned version into ``/usr/local/bin/kopia``.
 
     Idempotent: if the binary is already on disk and reports the pinned
     version, the network round-trip is skipped entirely. Otherwise the
     pinned tarball is fetched, sha256-verified, extracted, and atomically
-    moved into place.
+    moved into place. ``force`` (install ``--reinstall-deps``) skips the
+    idempotency probe and re-extracts the pinned binary unconditionally, to
+    repair a copy that reports the right version but is otherwise broken.
 
     Raises ``BinaryInstallError`` on download / verify / extract failure
     so the installer can hard-fail the whole install.
     """
     root = prefix if prefix is not None else Path("/")
     kopia_path = prefixed("/usr/local/bin/kopia", root)
-    installed = _kopia_installed_version(kopia_path)
-    if installed == KOPIA_VERSION:
-        event("info", "kopia already installed at pinned version", path=str(kopia_path), version=installed)
-        return
+    if not force:
+        installed = _kopia_installed_version(kopia_path)
+        if installed == KOPIA_VERSION:
+            event("info", "kopia already installed at pinned version", path=str(kopia_path), version=installed)
+            return
     pin = _BinaryPin(name="kopia", url=KOPIA_URL, sha256=KOPIA_SHA256)
     tarball_bytes = _fetch_pinned(pin)
     try:

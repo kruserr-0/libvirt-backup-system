@@ -59,8 +59,8 @@ def test_install_bootstraps_kopia_before_peer_password_validation(
     def fake_connect(**_kwargs: object) -> None:
         order.append("connect-peer")
 
-    def fake_install_kopia(prefix: object = None) -> None:
-        del prefix
+    def fake_install_kopia(prefix: object = None, *, force: bool = False) -> None:
+        del prefix, force
         order.append("kopia")
 
     monkeypatch.setenv("BACKUP_PATH", str(backup_path))
@@ -91,8 +91,8 @@ def test_install_reports_binary_failure_before_peer_password_validation(
     machine_id.parent.mkdir(parents=True)
     machine_id.write_text("11111111111111111111111111111111\n", encoding="utf-8")
 
-    def fail_kopia(prefix: object = None) -> None:
-        del prefix
+    def fail_kopia(prefix: object = None, *, force: bool = False) -> None:
+        del prefix, force
         raise BinaryInstallError("kopia unavailable")
 
     monkeypatch.setenv("BACKUP_PATH", str(backup_path))

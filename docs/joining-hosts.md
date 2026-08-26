@@ -37,10 +37,14 @@ first node's fstab entry in the backup tree and fails on any node whose
 fstab disagrees (see `BACKUP_REQUIRE_FSTAB_CONSISTENCY` in the
 [configuration reference](env-vars.md)).
 
-On an already installed host, print the join command:
+On an already installed host, print the join command. If the config changed
+since it was last published, run `update-config` first so the new host
+inherits the current settings instead of stale ones (see
+[`update-config` in depth](update-config.md)):
 
 ```sh
-sudo libvirt-backup-system add-node
+sudo libvirt-backup-system update-config   # publish current settings
+sudo libvirt-backup-system add-node        # then print the join command
 ```
 
 The output is a pasteable command in this shape:
@@ -107,17 +111,21 @@ back to `/etc/machine-id`).
 
 ### Updating the shared config
 
-To make a host's current config the template that **future** joins inherit,
-publish it explicitly:
+**Run `update-config` after every config change.** The workflow for any edit
+is always the same three commands:
 
 ```sh
 sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-sudo libvirt-backup-system start          # apply locally
-sudo libvirt-backup-system update-config  # publish for future joins
+sudo libvirt-backup-system start          # 1. apply the change locally
+sudo libvirt-backup-system update-config  # 2. publish it for the cluster
 ```
 
-`update-config` overwrites the seed (last writer wins). It only affects hosts
-that join *after* it runs; already-joined hosts keep their independent config.
+Skipping `update-config` leaves the seed stale, so the next host you join
+inherits the old settings and silently diverges from the nodes you already
+fixed. `update-config` overwrites the seed (last writer wins) and also
+re-records the shared fstab entry for the backup mount. It only affects
+hosts that join *after* it runs; already-joined hosts keep their independent
+config. Full details: [`update-config` in depth](update-config.md).
 
 ## Mount consistency across nodes
 

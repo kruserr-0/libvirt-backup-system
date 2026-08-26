@@ -13,20 +13,28 @@ Install libvirt-backup-system: copy the package to /opt/libvirt-backup-system,
 write the /usr/local/bin/libvirt-backup-system wrapper, drop the default
 /etc/libvirt-backup-system/libvirt-backup.env (preserving an existing one),
 render the systemd unit files, lay down the shared kopia token at
-KOPIA_PASSWORD_FILE, and install the fish completion script. The timers are
-NOT enabled automatically -- run ``start`` and then ``check`` after editing
-the env file to initialize the repo and validate the setup.
+KOPIA_PASSWORD_FILE, and install the bash and fish completion scripts. The
+timers are NOT enabled automatically -- run ``start`` and then ``check``
+after editing the env file to initialize the repo and validate the setup.
 
 Before anything is installed, the system dependencies (virsh, qemu-nbd,
 qemu-img, nbdcopy) are checked. When some are missing, install detects the
 Debian/Ubuntu release and offers to install the matching apt packages after
 confirmation (sudo asks for its password on the terminal and the credentials
-are used only for the apt-get commands, then dropped). Declining, running
-with --non-interactive, or an unrecognized OS release aborts the install
-before anything is modified, printing a copy-paste install command instead
--- this tool never installs OS packages without consent. kopia itself is
-installed by this command at a pinned version with automatic update checks
-disabled.
+are used only for the apt-get commands, then dropped); -y answers that
+confirmation automatically. For automation, --non-interactive never prompts:
+combined with -y it still apt-installs the missing packages when running as
+root or with passwordless sudo, and skips the attempt otherwise. Declining,
+--non-interactive without -y, a skipped attempt, or an unrecognized OS
+release aborts the install before anything is modified, printing the exact
+copy-paste apt command (and, on unknown releases, your detected OS version
+plus a ready-made question to paste into Google or ChatGPT) -- this tool
+never installs OS packages without consent. Dependencies already on the
+system are never installed again; pass --reinstall-deps to force
+``apt-get install --reinstall`` of every dependency package (and a re-extract
+of the pinned kopia binary) when they are broken for whatever reason. kopia
+itself is installed by this command at a pinned version with automatic
+update checks disabled.
 
 For a one-shot first install with BACKUP_PATH:
 
@@ -57,30 +65,46 @@ before pasting the install command. Preflight records the first node's
 fstab entry in the backup tree and fails when a node's fstab disagrees (see
 BACKUP_REQUIRE_FSTAB_CONSISTENCY in the env file). If you ever change the
 NFS server address, update /etc/fstab on ALL nodes, remount, and run
-``update-config`` on one node to re-record the shared entry."""
+``update-config`` on one node to re-record the shared entry.
+
+The new host inherits its settings from the shared config seed. If you have
+changed this host's config since it was last published, run
+``update-config`` first so the joining host inherits the current settings
+instead of stale ones:
+
+  sudo libvirt-backup-system update-config   # publish current settings
+  sudo libvirt-backup-system add-node        # then print the join command"""
 SHOW_TOKEN_HELP = "Print the shared kopia token from the local password file."
 
 
-UPDATE_CONFIG_HELP = "Publish this host's env config to the backup path as the shared seed for new joins."
+UPDATE_CONFIG_HELP = "Publish this host's config to the backup tree. Run after EVERY config change."
 UPDATE_CONFIG_DESCRIPTION = """\
 Copy this host's /etc/libvirt-backup-system/libvirt-backup.env up to the
 backup tree as the shared config seed (BACKUP_PATH/libvirt-backup.env),
-overwriting any previous seed.
+overwriting any previous seed, and re-record this host's /etc/fstab entry
+for the backup mount in the shared mount metadata.
 
-The shared config is a *seed*, not a live-synced file. The first node
-publishes it automatically (during ``install`` when BACKUP_PATH is set, and on
-``start``). When a new host joins (``install`` against the same BACKUP_PATH and
-token, e.g. via ``add-node``), it pulls the seed as its initial local config so
-it inherits retention, splitter, compression, and NFS policy without re-typing
-them. After joining, the local config is independent: edit it and run
-``start`` to change only this host (its own backup schedule, mount path, etc.)
-without touching the seed.
-
-Run ``update-config`` whenever you want this host's current config to become
-the template that future joins inherit. The most recent ``update-config`` from
-any host wins. ``HOST_ID`` is never shared -- it scopes the per-host repo, so
-each node keeps its own (falling back to /etc/machine-id).
+RUN THIS AFTER EVERY CONFIG CHANGE. The workflow for any edit is always:
 
   sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-  sudo libvirt-backup-system start          # apply locally
-  sudo libvirt-backup-system update-config  # publish for future joins"""
+  sudo libvirt-backup-system start          # 1. apply the change locally
+  sudo libvirt-backup-system update-config  # 2. publish it for the cluster
+
+Skipping update-config leaves the shared seed stale: the next host joined
+with ``add-node`` silently inherits the OLD settings (old retention, old
+schedule, old NFS policy) and diverges from the hosts you already fixed.
+
+The shared config is a *seed*, not a live-synced file. The first node
+publishes it automatically (during ``install`` when BACKUP_PATH is set, and
+on ``start``); a joining host pulls it as its initial local config so it
+inherits retention, splitter, compression, and NFS policy without re-typing
+them. After joining, each host's config is independent -- update-config does
+NOT push changes to already-joined hosts; to roll a change across the fleet,
+edit and ``start`` on each host, then update-config on one of them. The most
+recent ``update-config`` from any host wins. ``HOST_ID`` is never shared --
+it scopes the per-host repo, so each node keeps its own.
+
+update-config is also the final step after deliberately changing the NFS
+server address: update /etc/fstab on ALL nodes, remount, then run
+update-config on one node to re-record the shared fstab entry that the
+BACKUP_REQUIRE_FSTAB_CONSISTENCY preflight validates against."""

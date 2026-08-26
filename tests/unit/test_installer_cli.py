@@ -23,7 +23,7 @@ def _fake_config(tmp_path: Path) -> Config:
 def test_cli_commands(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         "libvirt_backup_system.cli.install",
-        lambda prefix, config_path=None, password_spec=None, non_interactive=False: 11,
+        lambda prefix, config_path=None, password_spec=None, **flags: 11,
     )
     assert main(["--prefix", str(tmp_path), "install"]) == 11
 
@@ -164,13 +164,9 @@ def test_cli_install_and_uninstall_forward_config_path(tmp_path: Path, monkeypat
     captured: dict[str, object] = {}
 
     def fake_install(
-        prefix: str | None,
-        *,
-        config_path: str | None = None,
-        password_spec: object | None = None,
-        non_interactive: bool = False,
+        prefix: str | None, *, config_path: str | None = None, password_spec: object | None = None, **flags: bool
     ) -> int:
-        captured["install"] = (prefix, config_path, password_spec, non_interactive)
+        captured["install"] = (prefix, config_path, password_spec, flags)
         return 0
 
     def fake_uninstall(prefix: str | None, **kwargs: object) -> int:
@@ -252,18 +248,14 @@ def test_cli_verify_reports_lock_busy(tmp_path: Path, monkeypatch, capsys) -> No
 def test_cli_exceptions(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         "libvirt_backup_system.cli.install",
-        lambda prefix, config_path=None, password_spec=None, non_interactive=False: (_ for _ in ()).throw(
-            KeyboardInterrupt()
-        ),
+        lambda prefix, config_path=None, password_spec=None, **flags: (_ for _ in ()).throw(KeyboardInterrupt()),
     )
     assert main(["install"]) == 130
     assert "interrupted" in capsys.readouterr().err
 
     monkeypatch.setattr(
         "libvirt_backup_system.cli.install",
-        lambda prefix, config_path=None, password_spec=None, non_interactive=False: (_ for _ in ()).throw(
-            RuntimeError("bad")
-        ),
+        lambda prefix, config_path=None, password_spec=None, **flags: (_ for _ in ()).throw(RuntimeError("bad")),
     )
     assert main(["install"]) == 1
     assert "fatal error" in capsys.readouterr().err

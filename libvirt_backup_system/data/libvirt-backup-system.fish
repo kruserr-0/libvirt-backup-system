@@ -45,6 +45,9 @@ complete -c libvirt-backup-system -n "__fish_seen_subcommand_from install" -l ko
 complete -c libvirt-backup-system -n "__fish_seen_subcommand_from install" -l kopia-password-file -r -F -d "Path to a file holding the kopia password; '-' reads stdin"
 complete -c libvirt-backup-system -n "__fish_seen_subcommand_from install" -l kopia-password-env -r -d "Environment variable name holding the kopia password"
 complete -c libvirt-backup-system -n "__fish_seen_subcommand_from install" -l acknowledge-password-loss -d "Acknowledge that losing the shared token makes backups unrecoverable"
+complete -c libvirt-backup-system -n "__fish_seen_subcommand_from install" -s y -l yes -d "Assume yes to the system-dependency install confirmation"
+complete -c libvirt-backup-system -n "__fish_seen_subcommand_from install" -l non-interactive -d "Never prompt (for automation tooling)"
+complete -c libvirt-backup-system -n "__fish_seen_subcommand_from install" -l reinstall-deps -d "Force apt-get --reinstall of all dependency packages and re-extract kopia"
 
 # change-password flags.
 complete -c libvirt-backup-system -n "__fish_seen_subcommand_from change-password" -l new-kopia-password -r -d "New shared kopia token"

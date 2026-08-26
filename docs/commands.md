@@ -66,13 +66,13 @@ sudo libvirt-backup-system start          # apply locally
 sudo libvirt-backup-system update-config  # publish for future joins
 ```
 
-The shared config is a *seed*, not a live-synced file: the first node
-publishes it automatically, a joining node pulls it as its initial local
-config, and after joining each host's config is independent. Run
-`update-config` whenever this host's current config should become the
-template that future joins inherit (last writer wins; `HOST_ID` is never
+**Run `update-config` after every config change** — skipping it leaves the
+shared seed stale, so the next `add-node` join inherits the old settings.
+The seed is not live-synced: a joining node pulls it as its initial config;
+already-joined hosts are unaffected (last writer wins; `HOST_ID` is never
 shared). It also re-records the shared fstab entry for the backup mount —
 the documented step after deliberately changing the NFS server address. See
+[`update-config` in depth](update-config.md) and
 [Joining additional hosts](joining-hosts.md#shared-configuration).
 
 ## `change-password`

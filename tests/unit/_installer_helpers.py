@@ -53,7 +53,7 @@ def fake_systemd_root(tmp_path: Path, monkeypatch) -> None:
     # surface, not the deps gate.
     monkeypatch.setattr(
         "libvirt_backup_system.installer.installer_deps.ensure_system_deps",
-        lambda root, non_interactive=False: 0,
+        lambda root, **kwargs: 0,
     )
     monkeypatch.setattr("libvirt_backup_system.installer.prefixed", fake_prefixed)
     monkeypatch.setattr("libvirt_backup_system.installer_uninstall.prefixed", fake_prefixed)
