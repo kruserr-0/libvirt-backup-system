@@ -1,4 +1,4 @@
-"""Help text for install / add-node / show-token / update-config.
+"""Help text for install / add-node / show-token / push-config / pull-config.
 
 Split out of ``cli_help`` to keep both files under the project's 300-LOC
 ceiling. ``cli_help`` re-exports these names so the parser wiring keeps a
@@ -65,46 +65,67 @@ before pasting the install command. Preflight records the first node's
 fstab entry in the backup tree and fails when a node's fstab disagrees (see
 BACKUP_REQUIRE_FSTAB_CONSISTENCY in the env file). If you ever change the
 NFS server address, update /etc/fstab on ALL nodes, remount, and run
-``update-config`` on one node to re-record the shared entry.
+``push-config`` on one node to re-record the shared entry.
 
-The new host inherits its settings from the shared config seed. If you have
-changed this host's config since it was last published, run
-``update-config`` first so the joining host inherits the current settings
-instead of stale ones:
+The new host inherits its settings from the shared config. If you have
+changed this host's config since it was last published, run ``push-config``
+first so the joining host inherits the current settings instead of stale
+ones:
 
-  sudo libvirt-backup-system update-config   # publish current settings
-  sudo libvirt-backup-system add-node        # then print the join command"""
+  sudo libvirt-backup-system push-config   # publish current settings
+  sudo libvirt-backup-system add-node      # then print the join command"""
 SHOW_TOKEN_HELP = "Print the shared kopia token from the local password file."
 
 
-UPDATE_CONFIG_HELP = "Publish this host's config to the backup tree. Run after EVERY config change."
-UPDATE_CONFIG_DESCRIPTION = """\
+PUSH_CONFIG_HELP = "Publish this host's config to the shared backup tree. Run after EVERY config change."
+PUSH_CONFIG_DESCRIPTION = """\
 Copy this host's /etc/libvirt-backup-system/libvirt-backup.env up to the
-backup tree as the shared config seed (BACKUP_PATH/libvirt-backup.env),
-overwriting any previous seed, and re-record this host's /etc/fstab entry
-for the backup mount in the shared mount metadata.
+backup tree as the shared config (BACKUP_PATH/libvirt-backup.env),
+overwriting any previous version, and re-record this host's /etc/fstab
+entry for the backup mount in the shared mount metadata.
 
-RUN THIS AFTER EVERY CONFIG CHANGE. The workflow for any edit is always:
+RUN THIS AFTER EVERY CONFIG CHANGE, then ``pull-config`` on the other
+nodes. The fleet-wide workflow for any edit is always:
 
+  # on the node you edited:
   sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-  sudo libvirt-backup-system start          # 1. apply the change locally
-  sudo libvirt-backup-system update-config  # 2. publish it for the cluster
+  sudo libvirt-backup-system start        # 1. apply the change locally
+  sudo libvirt-backup-system push-config  # 2. publish it for the cluster
 
-Skipping update-config leaves the shared seed stale: the next host joined
-with ``add-node`` silently inherits the OLD settings (old retention, old
-schedule, old NFS policy) and diverges from the hosts you already fixed.
+  # on every other node:
+  sudo libvirt-backup-system pull-config  # 3. take over the shared config
+  sudo libvirt-backup-system start        # 4. apply it locally
 
-The shared config is a *seed*, not a live-synced file. The first node
-publishes it automatically (during ``install`` when BACKUP_PATH is set, and
-on ``start``); a joining host pulls it as its initial local config so it
-inherits retention, splitter, compression, and NFS policy without re-typing
-them. After joining, each host's config is independent -- update-config does
-NOT push changes to already-joined hosts; to roll a change across the fleet,
-edit and ``start`` on each host, then update-config on one of them. The most
-recent ``update-config`` from any host wins. ``HOST_ID`` is never shared --
-it scopes the per-host repo, so each node keeps its own.
+Skipping push-config leaves the shared config stale: other nodes pull OLD
+settings, and the next host joined with ``add-node`` silently inherits them.
+The shared config is never live-synced -- nothing changes on a node until
+it pulls. The most recent push-config from any host wins. ``HOST_ID`` is
+never shared -- it scopes the per-host repo, so each node keeps its own.
+The first node also publishes automatically on ``install``/``start`` when no
+shared config exists yet.
 
-update-config is also the final step after deliberately changing the NFS
+push-config is also the final step after deliberately changing the NFS
 server address: update /etc/fstab on ALL nodes, remount, then run
-update-config on one node to re-record the shared fstab entry that the
-BACKUP_REQUIRE_FSTAB_CONSISTENCY preflight validates against."""
+push-config on one node to re-record the shared fstab entry that the
+BACKUP_REQUIRE_FSTAB_CONSISTENCY preflight validates against.
+
+``update-config`` is a deprecated alias of push-config."""
+
+
+PULL_CONFIG_HELP = "Take over the shared config pushed by another node, then run ``start``."
+PULL_CONFIG_DESCRIPTION = """\
+Overwrite this host's /etc/libvirt-backup-system/libvirt-backup.env with the
+shared config from the backup tree (BACKUP_PATH/libvirt-backup.env), as
+published by ``push-config`` on another node. Everything is taken over
+except this host's own identity and location: ``HOST_ID`` and
+``BACKUP_PATH`` keep their local values.
+
+Run this on every other node after a ``push-config``, and follow it with
+``start`` so the systemd units are re-rendered from the new values:
+
+  sudo libvirt-backup-system pull-config
+  sudo libvirt-backup-system start
+
+Fails cleanly when BACKUP_PATH is not configured, when this host has no
+local config yet (run ``install`` first), or when no shared config has been
+pushed yet."""

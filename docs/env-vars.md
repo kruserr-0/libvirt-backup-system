@@ -85,7 +85,7 @@ single node the check only fires once that node's own fstab drifts from what
 it recorded.
 
 **If you change the NFS server address**: update `/etc/fstab` on ALL nodes,
-remount, then run `update-config` on one node to re-record the shared entry.
+remount, then run `push-config` on one node to re-record the shared entry.
 Until then, preflight fails on every node whose fstab no longer matches the
 recorded entry. Enabled by default; set to `false` to disable the check.
 

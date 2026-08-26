@@ -77,7 +77,7 @@ def test_pull_returns_none_without_seed_and_values_with_seed(tmp_path: Path) -> 
     assert config_sync.pull_shared_config_values(cfg) == {"KOPIA_COMPRESSION": "zstd-better"}
 
 
-def test_update_shared_config_overwrites_existing_seed(tmp_path: Path) -> None:
+def test_push_shared_config_overwrites_existing_seed(tmp_path: Path) -> None:
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir()
     config_path = tmp_path / "etc/libvirt-backup-system/libvirt-backup.env"
@@ -87,20 +87,20 @@ def test_update_shared_config_overwrites_existing_seed(tmp_path: Path) -> None:
     seed = backup_dir / "libvirt-backup.env"
     seed.write_text("OLD-SEED\n", encoding="utf-8")
 
-    assert config_sync.update_shared_config(cfg) == 0
+    assert config_sync.push_shared_config(cfg) == 0
 
     text = seed.read_text(encoding="utf-8")
     assert "OLD-SEED" not in text
     assert "KOPIA_COMPRESSION=zstd-better" in text
 
 
-def test_update_shared_config_errors_without_backup_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_push_shared_config_errors_without_backup_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     config_path = tmp_path / "etc/libvirt-backup-system/libvirt-backup.env"
     config_path.parent.mkdir(parents=True)
     config_path.write_text("BACKUP_PATH=\n", encoding="utf-8")
     cfg = Config.load(config_path=str(config_path), prefix=str(tmp_path), apply_env_overrides=False)
 
-    assert config_sync.update_shared_config(cfg) == 1
+    assert config_sync.push_shared_config(cfg) == 1
     assert "BACKUP_PATH is not configured" in capsys.readouterr().err
 
 
@@ -138,18 +138,18 @@ def test_seed_warns_when_publish_fails(
     assert "failed to publish shared config" in capsys.readouterr().err
 
 
-def test_update_shared_config_errors_when_local_config_missing(
+def test_push_shared_config_errors_when_local_config_missing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir()
     cfg = _config(tmp_path, backup_dir)  # default config path never written
 
-    assert config_sync.update_shared_config(cfg) == 1
+    assert config_sync.push_shared_config(cfg) == 1
     assert "config file not found" in capsys.readouterr().err
 
 
-def test_update_shared_config_errors_when_write_fails(
+def test_push_shared_config_errors_when_write_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     backup_dir = tmp_path / "backups"
@@ -163,7 +163,7 @@ def test_update_shared_config_errors_when_write_fails(
         raise PermissionError("read-only backup tree")
 
     monkeypatch.setattr(config_sync, "_atomic_write", refuse)
-    assert config_sync.update_shared_config(cfg) == 1
+    assert config_sync.push_shared_config(cfg) == 1
     assert "failed to publish shared config" in capsys.readouterr().err
 
 
@@ -172,7 +172,7 @@ def test_update_shared_config_errors_when_write_fails(
 # --------------------------------------------------------------------------
 
 
-def test_cli_update_config_publishes_local_config(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_push_config_publishes_local_config(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir()
     config_path = tmp_path / "etc/libvirt-backup-system/libvirt-backup.env"
@@ -182,12 +182,16 @@ def test_cli_update_config_publishes_local_config(tmp_path: Path, capsys: pytest
         encoding="utf-8",
     )
 
-    assert main(["--prefix", str(tmp_path), "update-config"]) == 0
+    assert main(["--prefix", str(tmp_path), "push-config"]) == 0
 
     text = (backup_dir / "libvirt-backup.env").read_text(encoding="utf-8")
     assert "SYSTEMD_ON_CALENDAR=*-*-* 05:05:00" in text
     assert "# HOST_ID=\n" in text
     assert "node-a" not in text
+    # ``update-config`` stays as a deprecated alias of push-config.
+    (backup_dir / "libvirt-backup.env").unlink()
+    assert main(["--prefix", str(tmp_path), "update-config"]) == 0
+    assert (backup_dir / "libvirt-backup.env").is_file()
 
 
 # --------------------------------------------------------------------------

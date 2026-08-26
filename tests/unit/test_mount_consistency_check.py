@@ -93,7 +93,7 @@ def test_changed_server_address_fails_with_both_entries(tmp_path: Path) -> None:
     assert "10.9.9.9:/export/backups" in failures[0]
     assert NFS_SOURCE in failures[0]
     assert "update /etc/fstab on ALL nodes" in failures[0]
-    assert "update-config" in failures[0]
+    assert "push-config" in failures[0]
     assert "BACKUP_REQUIRE_FSTAB_CONSISTENCY=false" in failures[0]
 
 
@@ -191,13 +191,13 @@ def test_repo_creation_preflight_includes_consistency(tmp_path: Path) -> None:
     assert any("fstab entry for the BACKUP_PATH mount differs" in failure for failure in failures)
 
 
-def test_update_shared_config_rerecords_mount_metadata(tmp_path: Path) -> None:
+def test_push_shared_config_rerecords_mount_metadata(tmp_path: Path) -> None:
     cfg = make_config(tmp_path)
     cfg.path.parent.mkdir(parents=True, exist_ok=True)
     cfg.path.write_text(f"BACKUP_PATH={cfg.get('BACKUP_PATH')}\n", encoding="utf-8")
     write_fstab(cfg, mount_line(cfg))
     mount_consistency.record_local_mount(cfg)
     write_fstab(cfg, mount_line(cfg, source="10.9.9.9:/export/backups"))
-    assert config_sync.update_shared_config(cfg) == 0
+    assert config_sync.push_shared_config(cfg) == 0
     entry, _ = mount_consistency.recorded_entry(cfg)
     assert entry is not None and entry.source == "10.9.9.9:/export/backups"

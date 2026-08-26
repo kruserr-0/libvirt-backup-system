@@ -128,8 +128,13 @@ class Config:
             if item is None:
                 lines.append("")
             elif item in DEFAULTS:
-                prefix = "# " if item in COMMENTED_ENV_KEYS else ""
-                lines.append(f"{prefix}{item}={self.values.get(item, DEFAULTS[item])}")
+                value = self.values.get(item, DEFAULTS[item])
+                # Untouched keys render as commented documentation; a value
+                # that differs from the default must stay ACTIVE, or a
+                # rendered config (push-config's shared file, a fresh
+                # install's env) would silently comment the setting away.
+                prefix = "# " if item in COMMENTED_ENV_KEYS and value == DEFAULTS[item] else ""
+                lines.append(f"{prefix}{item}={value}")
             else:
                 lines.append(item)
         return "\n".join(lines) + "\n"

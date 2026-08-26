@@ -120,7 +120,7 @@ ENV_TEMPLATE: tuple[str | None, ...] = (
     "# verifies the live mount matches fstab. Mismatches fail preflight before",
     "# any backup is attempted. Enabled by default.",
     "# NOTE: if you change the NFS server address, update /etc/fstab on ALL",
-    "# nodes, remount, and run ``update-config`` on one node to re-record the",
+    "# nodes, remount, and run ``push-config`` on one node to re-record the",
     "# shared entry.",
     "BACKUP_REQUIRE_FSTAB_CONSISTENCY",
     None,

@@ -39,7 +39,7 @@ backups to the local disk. Preflight also verifies every node's `/etc/fstab`
 entry for the backup mount matches the entry recorded by the first node —
 same NFS server address, fstype, and options
 (`BACKUP_REQUIRE_FSTAB_CONSISTENCY`; if the server address changes, update
-`/etc/fstab` on ALL nodes, remount, and run `update-config` on one node).
+`/etc/fstab` on ALL nodes, remount, and run `push-config` on one node).
 For an intentionally local backup directory set
 `BACKUP_REQUIRE_NFS_MOUNT=false`; see the
 [configuration reference](env-vars.md).

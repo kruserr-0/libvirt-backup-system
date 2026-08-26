@@ -38,13 +38,13 @@ fstab disagrees (see `BACKUP_REQUIRE_FSTAB_CONSISTENCY` in the
 [configuration reference](env-vars.md)).
 
 On an already installed host, print the join command. If the config changed
-since it was last published, run `update-config` first so the new host
+since it was last published, run `push-config` first so the new host
 inherits the current settings instead of stale ones (see
-[`update-config` in depth](update-config.md)):
+[`push-config` / `pull-config`](config-sync.md)):
 
 ```sh
-sudo libvirt-backup-system update-config   # publish current settings
-sudo libvirt-backup-system add-node        # then print the join command
+sudo libvirt-backup-system push-config   # publish current settings
+sudo libvirt-backup-system add-node      # then print the join command
 ```
 
 The output is a pasteable command in this shape:
@@ -111,21 +111,27 @@ back to `/etc/machine-id`).
 
 ### Updating the shared config
 
-**Run `update-config` after every config change.** The workflow for any edit
-is always the same three commands:
+**Run `push-config` after every config change, then `pull-config` on the
+other nodes.** The fleet-wide workflow for any edit is always:
 
 ```sh
+# on the node you edited:
 sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-sudo libvirt-backup-system start          # 1. apply the change locally
-sudo libvirt-backup-system update-config  # 2. publish it for the cluster
+sudo libvirt-backup-system start        # 1. apply the change locally
+sudo libvirt-backup-system push-config  # 2. publish it for the cluster
+
+# on every other node:
+sudo libvirt-backup-system pull-config  # 3. take over the shared config
+sudo libvirt-backup-system start        # 4. apply it locally
 ```
 
-Skipping `update-config` leaves the seed stale, so the next host you join
-inherits the old settings and silently diverges from the nodes you already
-fixed. `update-config` overwrites the seed (last writer wins) and also
-re-records the shared fstab entry for the backup mount. It only affects
-hosts that join *after* it runs; already-joined hosts keep their independent
-config. Full details: [`update-config` in depth](update-config.md).
+Skipping `push-config` leaves the shared config stale, so pulls and the next
+`add-node` join get old settings and silently diverge from the nodes you
+already fixed. `push-config` overwrites the shared file (last writer wins)
+and re-records the shared fstab entry for the backup mount; `pull-config`
+preserves the local `HOST_ID` and `BACKUP_PATH`. Nothing is live-synced — a
+node changes only when it pulls. Full details:
+[`push-config` / `pull-config`](config-sync.md).
 
 ## Mount consistency across nodes
 
@@ -143,7 +149,7 @@ prints both fstab entries so the operator can inspect them or simply copy
 the fstab line from a working, already-joined node.
 
 **Changing the NFS server address** (new IP, migrated NAS): update
-`/etc/fstab` on ALL nodes, remount, then run `update-config` on one node —
+`/etc/fstab` on ALL nodes, remount, then run `push-config` on one node —
 it re-records the shared fstab entry along with the config seed. The check
 is controlled by `BACKUP_REQUIRE_FSTAB_CONSISTENCY` (enabled by default).
 

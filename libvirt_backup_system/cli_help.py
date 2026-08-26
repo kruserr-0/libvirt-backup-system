@@ -9,16 +9,18 @@ lines matter.
 
 from __future__ import annotations
 
-# Re-exported: install/add-node/show-token/update-config help lives in
-# cli_help_install (LOC ceiling) but stays addressable as cli_help.*.
+# Re-exported: install/add-node/show-token/push-config/pull-config help lives
+# in cli_help_install (LOC ceiling) but stays addressable as cli_help.*.
 from .cli_help_install import (
     ADD_NODE_DESCRIPTION,
     ADD_NODE_HELP,
     INSTALL_DESCRIPTION,
     INSTALL_HELP,
+    PULL_CONFIG_DESCRIPTION,
+    PULL_CONFIG_HELP,
+    PUSH_CONFIG_DESCRIPTION,
+    PUSH_CONFIG_HELP,
     SHOW_TOKEN_HELP,
-    UPDATE_CONFIG_DESCRIPTION,
-    UPDATE_CONFIG_HELP,
 )
 
 __all__ = [
@@ -28,9 +30,11 @@ __all__ = [
     "CHECK_HELP",
     "INSTALL_DESCRIPTION",
     "INSTALL_HELP",
+    "PULL_CONFIG_DESCRIPTION",
+    "PULL_CONFIG_HELP",
+    "PUSH_CONFIG_DESCRIPTION",
+    "PUSH_CONFIG_HELP",
     "SHOW_TOKEN_HELP",
-    "UPDATE_CONFIG_DESCRIPTION",
-    "UPDATE_CONFIG_HELP",
 ]
 
 PROGRAM_DESCRIPTION = """\

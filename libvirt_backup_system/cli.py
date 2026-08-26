@@ -15,7 +15,8 @@ from .cli_parser import password_spec_from_args as _password_spec_from_args
 from .cli_restore import restore_command as _restore_command
 from .cli_restore import temp_restore_command as _temp_restore_command
 from .config import Config
-from .config_sync import update_shared_config as _update_config_impl
+from .config_sync import pull_local_config as _pull_config_impl
+from .config_sync import push_shared_config as _push_config_impl
 from .doctor import doctor
 from .du_args import resolve_du_filters
 from .installer import install, uninstall
@@ -222,7 +223,9 @@ def main(argv: list[str] | None = None) -> int:
         config_only = {
             "add-node": _add_node_impl,
             "show-token": _show_token_impl,
-            "update-config": _update_config_impl,
+            "push-config": _push_config_impl,
+            "update-config": _push_config_impl,
+            "pull-config": _pull_config_impl,
         }
         if args.command in config_only:
             return config_only[args.command](config)

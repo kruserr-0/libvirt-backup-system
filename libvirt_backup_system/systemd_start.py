@@ -158,7 +158,7 @@ def start(prefix: str | None = None, *, config_path: str | None = None) -> int:
     # First node establishes the shared config seed (best-effort, only when no
     # seed exists yet). This covers the common flow where BACKUP_PATH is set
     # after the initial install, so install had nothing to publish. A node that
-    # joined later never clobbers the seed here; pushing updates is update-config.
+    # joined later never clobbers the seed here; pushing updates is push-config.
     config_sync.seed_shared_config(rendered.config, rendered.resolved_config)
     systemd_dir = prefixed("/etc/systemd/system", root)
     systemd_dir.mkdir(parents=True, exist_ok=True)

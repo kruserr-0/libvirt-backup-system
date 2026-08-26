@@ -48,7 +48,11 @@ BROKEN
     assert "# KOPIA_PASSWORD_FILE=/etc/libvirt-backup-system/kopia.pw" in rendered
     assert "# KEEP_DAILY=365" in rendered
     assert "# KOPIA_MAINTENANCE_INTERVAL=24h" in rendered
-    assert "# BACKUP_REQUIRE_NFS_MOUNT=false" in rendered
+    # A value changed from its default renders ACTIVE (uncommented), so the
+    # setting survives a render round-trip (push-config/pull-config).
+    assert "\nBACKUP_REQUIRE_NFS_MOUNT=false\n" in rendered
+    # Untouched keys stay commented documentation.
+    assert "# REQUIRE_ROOT=true" in rendered
     # Legacy chain-era keys must not appear anywhere in the rendered env.
     assert "BACKUP_COMPRESS" not in rendered
     assert "BACKUP_RETENTION_MONTHS" not in rendered

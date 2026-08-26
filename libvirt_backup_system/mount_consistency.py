@@ -12,7 +12,7 @@ the operator can copy the line from a working node.
 
 Controlled by ``BACKUP_REQUIRE_FSTAB_CONSISTENCY`` (enabled by default).
 If the NFS server address changes on purpose: update ``/etc/fstab`` on ALL
-nodes, remount, then run ``update-config`` on one node to re-record the
+nodes, remount, then run ``push-config`` on one node to re-record the
 shared entry.
 """
 
@@ -211,7 +211,7 @@ def consistency_failures(config: Config) -> list[str]:
             f"this host has '{state.fstab.render()}' but the recorded entry is {recorded_label}. "
             "Every node must mount the same upstream server (same IP/export) with the same fstab setup; "
             "copy the fstab line from a working joined node. If the NFS server address changed on purpose, "
-            "update /etc/fstab on ALL nodes, remount, and run update-config on one node to re-record it. "
+            "update /etc/fstab on ALL nodes, remount, and run push-config on one node to re-record it. "
             "Set BACKUP_REQUIRE_FSTAB_CONSISTENCY=false to disable this check."
         )
     return failures
@@ -220,7 +220,7 @@ def consistency_failures(config: Config) -> list[str]:
 def record_local_mount(config: Config, *, overwrite: bool = False) -> None:
     """Best-effort publish of this host's fstab entry to the backup tree.
 
-    First writer wins unless ``overwrite`` (used by ``update-config`` after a
+    First writer wins unless ``overwrite`` (used by ``push-config`` after a
     deliberate change such as a new NFS server address). Failures are
     warnings: publishing metadata must not fail an otherwise-good run.
     """

@@ -10,7 +10,7 @@
 # restore, and du, backed by the same cached ``list-restore-points`` table
 # (bash cannot render per-candidate descriptions, so values complete bare).
 
-__lbs_subcommands="install add-node show-token update-config change-password uninstall check preflight doctor run backup start status log logs list-vms verify list-restore-points du restore temp-restore"
+__lbs_subcommands="install add-node show-token push-config pull-config update-config change-password uninstall check preflight doctor run backup start status log logs list-vms verify list-restore-points du restore temp-restore"
 
 __lbs_cache_file() {
     local root

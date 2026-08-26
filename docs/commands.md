@@ -27,7 +27,8 @@ repos already exist.
 
 When `BACKUP_PATH` is set, a fresh install also syncs the shared config seed
 at `BACKUP_PATH/libvirt-backup.env`: the first node publishes its config, a
-joining node pulls the existing seed. See [`update-config`](#update-config).
+joining node pulls the existing seed. See
+[`push-config` / `pull-config`](#push-config--pull-config).
 
 ## `add-node`
 
@@ -55,25 +56,24 @@ Prints the raw shared token from the secure password file:
 sudo libvirt-backup-system show-token
 ```
 
-## `update-config`
+## `push-config` / `pull-config`
 
-Publishes this host's env file to the backup path as the shared config seed
-(`BACKUP_PATH/libvirt-backup.env`), overwriting any previous seed:
+Config changes travel through the backup tree: push on the node you edited,
+pull on the others (`update-config` is a deprecated alias of `push-config`):
 
 ```sh
-sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-sudo libvirt-backup-system start          # apply locally
-sudo libvirt-backup-system update-config  # publish for future joins
+sudoedit /etc/libvirt-backup-system/libvirt-backup.env    # on the edited node
+sudo libvirt-backup-system start && sudo libvirt-backup-system push-config
+
+sudo libvirt-backup-system pull-config && sudo libvirt-backup-system start   # on every other node
 ```
 
-**Run `update-config` after every config change** — skipping it leaves the
-shared seed stale, so the next `add-node` join inherits the old settings.
-The seed is not live-synced: a joining node pulls it as its initial config;
-already-joined hosts are unaffected (last writer wins; `HOST_ID` is never
-shared). It also re-records the shared fstab entry for the backup mount —
-the documented step after deliberately changing the NFS server address. See
-[`update-config` in depth](update-config.md) and
-[Joining additional hosts](joining-hosts.md#shared-configuration).
+**Run `push-config` after every config change** — skipping it leaves the
+shared config stale for pulls and future `add-node` joins. Nothing is
+live-synced: a node changes only when it pulls; `pull-config` preserves the
+local `HOST_ID` and `BACKUP_PATH`. `push-config` also re-records the shared
+fstab entry for the backup mount. Full details:
+[`push-config` / `pull-config`](config-sync.md).
 
 ## `change-password`
 
@@ -164,7 +164,7 @@ and to initialize an empty `BACKUP_PATH`; then run `check`.
 
 On the first node, `start` also publishes the shared config seed at
 `BACKUP_PATH/libvirt-backup.env` if none exists yet (it never overwrites an
-existing seed). Use [`update-config`](#update-config) to push later edits to
+existing seed). Use [`push-config`](#push-config--pull-config) to push later edits to
 the seed for future joins.
 
 ```sh

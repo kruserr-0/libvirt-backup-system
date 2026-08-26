@@ -1,20 +1,23 @@
 """Share the env config across hosts through the backup tree.
 
 A single "shared config" file lives at ``BACKUP_PATH/<SHARED_CONFIG_NAME>``,
-alongside the per-host ``BACKUP_PATH/<host-id>/kopia-repo/`` directories. It is
-a *seed*, not a live-synced file:
+alongside the per-host ``BACKUP_PATH/<host-id>/kopia-repo/`` directories:
 
-* The first node publishes its config there (``install``/``start``, and the
-  explicit ``update-config``).
-* A node *joining* an existing backup tree pulls that seed as its initial
-  local config, so it inherits retention, splitter, NFS policy, etc. without
-  re-typing them.
-* After joining, the local config is independent. Editing it does not touch
-  the seed; the seed only changes when someone runs ``update-config``.
+* ``push-config`` publishes this host's config there (the first node also
+  publishes automatically on ``install``/``start``).
+* ``pull-config`` overwrites another node's local config from the shared
+  file — push on one node, pull on the others to roll a config change
+  across the fleet.
+* A node *joining* an existing backup tree pulls the shared config as its
+  initial local config, so it inherits retention, splitter, NFS policy,
+  etc. without re-typing them.
 
-``HOST_ID`` is deliberately blanked in the seed: host identity scopes the
-per-host repo (``BACKUP_PATH/<HOST_ID>/kopia-repo/``), so sharing it would
-collide two hosts onto one repo. Each node falls back to ``/etc/machine-id``.
+The file is never live-synced: nothing changes on a node until it pulls.
+
+``HOST_ID`` is deliberately blanked in the shared file: host identity scopes
+the per-host repo (``BACKUP_PATH/<HOST_ID>/kopia-repo/``), so sharing it
+would collide two hosts onto one repo. ``pull-config`` likewise preserves
+the local ``HOST_ID`` and ``BACKUP_PATH``.
 """
 
 from __future__ import annotations
@@ -121,16 +124,17 @@ def seed_shared_config(config: Config, source_path: Path) -> None:
         event("warning", "failed to publish shared config", path=str(dest), error=str(exc))
 
 
-def update_shared_config(config: Config) -> int:
-    """Overwrite the shared seed with this host's current config.
+def push_shared_config(config: Config) -> int:
+    """Overwrite the shared config with this host's current config.
 
-    Backs the ``update-config`` command. Unlike ``seed_shared_config`` this
-    always replaces the seed (last writer wins), so a node that joins after
-    this call inherits this host's settings. Returns a process exit code.
+    Backs the ``push-config`` command (``update-config`` is a deprecated
+    alias). Unlike ``seed_shared_config`` this always replaces the shared
+    file (last writer wins); other nodes take it over with ``pull-config``,
+    and joining nodes inherit it automatically. Returns a process exit code.
     """
     dest = shared_config_path(config)
     if dest is None:
-        event("error", "BACKUP_PATH is not configured; set it before update-config")
+        event("error", "BACKUP_PATH is not configured; set it before push-config")
         return 1
     if not config.path.exists():
         event("error", "config file not found", path=str(config.path))
@@ -144,7 +148,54 @@ def update_shared_config(config: Config) -> int:
     event("info", "published shared config", path=str(dest))
     # Also re-record this host's fstab entry for the backup mount: after a
     # deliberate change (e.g. a new NFS server address rolled out to every
-    # node), update-config is the documented way to refresh the shared entry
+    # node), push-config is the documented way to refresh the shared entry
     # that BACKUP_REQUIRE_FSTAB_CONSISTENCY validates against.
     mount_consistency.record_local_mount(config, overwrite=True)
+    return 0
+
+
+def pull_local_config(config: Config) -> int:
+    """Overwrite the local env file from the shared config (``pull-config``).
+
+    Push on one node, pull on the others: everything in the shared file is
+    taken over except the host-local keys — HOST_ID (identity scopes the
+    per-host repo) and BACKUP_PATH (how this node reaches the shared storage
+    in the first place). The operator must run ``start`` afterwards so the
+    systemd units are re-rendered from the new values. Returns an exit code.
+    """
+    src = shared_config_path(config)
+    if src is None:
+        event("error", "BACKUP_PATH is not configured; set it before pull-config")
+        return 1
+    if not config.path.exists():
+        event("error", "local config file not found; run install first", path=str(config.path))
+        return 1
+    if not src.exists():
+        event("error", "no shared config found; run push-config on a configured node first", path=str(src))
+        return 1
+    try:
+        seed_values = parse_env_file(src)
+    except OSError as exc:
+        event("error", "shared config unreadable", path=str(src), error=str(exc))
+        return 1
+    local_values = parse_env_file(config.path)
+    values = dict(DEFAULTS)
+    values.update(seed_values)
+    # An empty local HOST_ID stays empty (= keep following /etc/machine-id)
+    # rather than freezing the resolved id into the file; BACKUP_PATH falls
+    # back to the resolved value when the file relied on the environment.
+    values["HOST_ID"] = local_values.get("HOST_ID", "")
+    values["BACKUP_PATH"] = local_values.get("BACKUP_PATH", config.get("BACKUP_PATH"))
+    content = Config(values=values, path=config.path, prefix=config.prefix).render_env()
+    try:
+        _atomic_write(config.path, content)
+    except OSError as exc:
+        event("error", "failed to write local config", path=str(config.path), error=str(exc))
+        return 1
+    event("info", "pulled shared config", path=str(config.path), source=str(src))
+    print(
+        "\nPulled the shared config into "
+        f"{config.path}.\nNow apply it on this host:\n  sudo libvirt-backup-system start\n",
+        flush=True,
+    )
     return 0

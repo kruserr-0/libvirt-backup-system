@@ -93,9 +93,16 @@ def build_parser() -> argparse.ArgumentParser:
     _add_subparser(sub, "show-token", help_text=cli_help.SHOW_TOKEN_HELP)
     _add_subparser(
         sub,
-        "update-config",
-        help_text=cli_help.UPDATE_CONFIG_HELP,
-        description=cli_help.UPDATE_CONFIG_DESCRIPTION,
+        "push-config",
+        help_text=cli_help.PUSH_CONFIG_HELP,
+        description=cli_help.PUSH_CONFIG_DESCRIPTION,
+        aliases=["update-config"],
+    )
+    _add_subparser(
+        sub,
+        "pull-config",
+        help_text=cli_help.PULL_CONFIG_HELP,
+        description=cli_help.PULL_CONFIG_DESCRIPTION,
     )
 
     change_password_parser = _add_subparser(

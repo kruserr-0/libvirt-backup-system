@@ -28,7 +28,7 @@ recorded in the backup tree (same server IP, fstype, and options). For an
 intentionally local backup directory, set `BACKUP_REQUIRE_NFS_MOUNT=false` in
 `/etc/libvirt-backup-system/libvirt-backup.env`; the fstab check is governed
 by `BACKUP_REQUIRE_FSTAB_CONSISTENCY`. If the NFS server address ever
-changes, update `/etc/fstab` on ALL nodes, remount, and run `update-config`
+changes, update `/etc/fstab` on ALL nodes, remount, and run `push-config`
 on one node.
 
 Then verify the install, activate the schedules, and run a health check:
@@ -70,15 +70,19 @@ hosts](docs/joining-hosts.md).
 The first node publishes its env config to `BACKUP_PATH/libvirt-backup.env` as
 a shared seed; joining nodes pull it as their initial config (retention,
 splitter, schedule, NFS policy) instead of starting from defaults. After
-joining, each host's config is independent. **Run `update-config` after every
-config change** so the seed (and the recorded fstab entry) stays current and
-the next join inherits your real settings, not stale ones — see
-[`update-config` in depth](docs/update-config.md):
+joining, each host's config is independent until it pulls. **Run
+`push-config` after every config change, then `pull-config` on the other
+nodes** — see [`push-config` / `pull-config`](docs/config-sync.md):
 
 ```sh
+# on the node you edited:
 sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-sudo libvirt-backup-system start          # apply the change locally
-sudo libvirt-backup-system update-config  # publish it for the cluster
+sudo libvirt-backup-system start        # apply the change locally
+sudo libvirt-backup-system push-config  # publish it for the cluster
+
+# on every other node:
+sudo libvirt-backup-system pull-config  # take over the shared config
+sudo libvirt-backup-system start        # apply it locally
 ```
 
 ## Basic use
@@ -147,7 +151,7 @@ default `7d`) checks the local repo on its own cadence.
 - [Install and prerequisites](docs/install.md)
 - [System dependencies](docs/system-deps.md)
 - [Joining additional hosts](docs/joining-hosts.md)
-- [`update-config`: publishing config changes](docs/update-config.md)
+- [`push-config` / `pull-config`: rolling out config changes](docs/config-sync.md)
 - [Backup consistency and QEMU guest agent setup](docs/backup-consistency.md)
 - [Configuration reference](docs/env-vars.md)
 - [Command reference](docs/commands.md)
