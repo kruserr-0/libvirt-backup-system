@@ -38,6 +38,12 @@ def test_install_without_backup_path_disables_kopia_units_before_removing_them(
 
     fake_prefixed = lambda path, root: tmp_path / str(path).lstrip("/")  # noqa: E731
     monkeypatch.setattr("libvirt_backup_system.installer.root_prefix", lambda prefix=None: Path("/"))
+    # root_prefix is forced to "/" above; keep the system dependency gate from
+    # probing the real host in this systemd-focused test.
+    monkeypatch.setattr(
+        "libvirt_backup_system.installer.installer_deps.ensure_system_deps",
+        lambda root, non_interactive=False: 0,
+    )
     monkeypatch.setattr("libvirt_backup_system.installer.prefixed", fake_prefixed)
     monkeypatch.setattr("libvirt_backup_system.installer_uninstall.prefixed", fake_prefixed)
     monkeypatch.setattr("libvirt_backup_system.systemd_units.prefixed", fake_prefixed)

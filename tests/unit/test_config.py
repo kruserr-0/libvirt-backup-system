@@ -72,7 +72,10 @@ def test_config_helpers(tmp_path: Path, monkeypatch) -> None:
         prefix=str(tmp_path),
         apply_env_overrides=False,
     )
-    assert not default_cfg.enabled("BACKUP_REQUIRE_NFS_MOUNT")
+    # NFS-mount and fstab-consistency enforcement default to enabled so a
+    # missing mount or divergent fstab fails preflight out of the box.
+    assert default_cfg.enabled("BACKUP_REQUIRE_NFS_MOUNT")
+    assert default_cfg.enabled("BACKUP_REQUIRE_FSTAB_CONSISTENCY")
 
 
 def test_load_uses_default_config_environment(tmp_path: Path, monkeypatch) -> None:

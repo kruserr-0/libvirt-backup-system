@@ -1,21 +1,25 @@
-"""Pinned-version binary installers for kopia and nbdcopy (libnbd-bin).
+"""Pinned-version binary installer for kopia.
 
-The system shells out to ``kopia`` and ``nbdcopy``; previously the operator
-had to apt-install both before running ``install``. This module wires both
-into the install entry point: download the upstream artifact, verify a
-pinned sha256, then drop the binary into place.
+The system shells out to ``kopia``, which is not packaged by Debian/Ubuntu;
+``install`` wires it in by extracting the vendored pinned tarball (or
+downloading the same pinned upstream release) after verifying a pinned
+sha256, then dropping the binary into place atomically.
 
-Architecture: Linux **amd64 only**. The pinned URLs and digests here all
-target ``linux-x64`` / ``_amd64.deb`` artifacts; the project's existing
-preflight + apt instructions already assume the same platform.
+The other external binaries (``virsh``, ``qemu-nbd``, ``qemu-img``,
+``nbdcopy``) come from OS packages and are deliberately NOT installed here:
+``installer_deps`` checks them up front and either installs them via the
+host's own apt (with the operator's explicit consent) or aborts the install
+with a copy-paste command for the detected release. Side-loading .debs
+built for a different OS release is exactly the half-broken state that
+policy exists to prevent.
 
-Network: the install step makes outbound HTTPS / HTTP requests against
-``github.com`` and ``deb.debian.org``. A pre-placed binary at the pinned
-version path lets an offline host skip both calls (see
-``docs/install.md`` for the offline procedure).
+Network: a kopia install without the vendored tarball makes one outbound
+HTTPS request against ``github.com``. A pre-placed binary at the pinned
+version lets an offline host skip the call (see ``docs/install.md`` for
+the offline procedure).
 
-Determinism: every download is sha256-verified against a constant pinned
-in this module before any extract / dpkg step runs. A mismatch raises
+Determinism: the download is sha256-verified against a constant pinned in
+``kopia_vendor`` before any extract step runs. A mismatch raises
 ``BinaryInstallError`` so a bad pin or a tampered mirror fails loudly
 instead of silently installing the wrong bits.
 """
@@ -23,12 +27,9 @@ instead of silently installing the wrong bits.
 from __future__ import annotations
 
 import hashlib
-import shutil
 import tarfile
-import tempfile
 import urllib.error
 import urllib.request
-from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,26 +44,6 @@ from .kopia_vendor import (
 from .kopia_vendor import extract_kopia_binary as _extract_kopia_binary
 from .logging_json import event
 from .shell import CommandError, run
-
-# --- Pinned versions ---------------------------------------------------------
-#
-# Bumping any of these constants is a deliberate operator action — the
-# matching sha256 MUST be refreshed in the same commit. The doc comment on
-# each block names the upstream source so the next bump knows where to look.
-
-# libnbd-bin .deb from the Debian "bookworm" archive (the OS the system
-# targets per docs/install.md). Version 1.14.2-1 is the bookworm pin
-# (https://packages.debian.org/bookworm/libnbd-bin); refresh the version
-# AND both digests below in the same commit when bumping.
-LIBNBD_VERSION = "1.14.2-1"
-LIBNBD_BIN_DEB_URL = f"http://deb.debian.org/debian/pool/main/libn/libnbd/" f"libnbd-bin_{LIBNBD_VERSION}_amd64.deb"
-LIBNBD_BIN_SHA256 = "5ff45a2dd463cab00ac91c7e2747e2373ce8031f90d6f50e0e95edae470453dc"
-
-# libnbd0 is libnbd-bin's required transitive dep; pinning it here lets the
-# installer install both .debs in one dpkg pass and avoid an apt-get
-# round-trip on hosts that do not already have libnbd0.
-LIBNBD0_DEB_URL = f"http://deb.debian.org/debian/pool/main/libn/libnbd/" f"libnbd0_{LIBNBD_VERSION}_amd64.deb"
-LIBNBD0_SHA256 = "775d8a88ac1d3daf9cea723fb0faca07e6167a4bcd606af37e73eb8ec5eba009"
 
 
 class BinaryInstallError(RuntimeError):
@@ -82,7 +63,7 @@ def _download(url: str) -> bytes:
         # ``urllib.request.urlopen`` follows redirects (kopia GitHub releases
         # 302 from github.com to objects.githubusercontent.com) and returns
         # the asset bytes; we keep the whole response in memory because the
-        # pinned artifacts are ~10-20 MB each.
+        # pinned artifact is ~10-20 MB.
         with urllib.request.urlopen(url) as response:  # noqa: S310
             data = response.read()
     except (urllib.error.URLError, OSError) as exc:
@@ -103,11 +84,10 @@ def _verify_sha256(data: bytes, expected: str, *, source: str) -> None:
 
 
 def _fetch_pinned(pin: _BinaryPin) -> bytes:
-    if pin.name == "kopia":
-        vendored = vendored_kopia_tarball_bytes()
-        if vendored is not None:
-            event("info", "using vendored pinned binary", name=pin.name, sha256=pin.sha256)
-            return vendored
+    vendored = vendored_kopia_tarball_bytes()
+    if vendored is not None:
+        event("info", "using vendored pinned binary", name=pin.name, sha256=pin.sha256)
+        return vendored
     event("info", "downloading pinned binary", name=pin.name, url=pin.url)
     data = _download(pin.url)
     _verify_sha256(data, pin.sha256, source=pin.url)
@@ -154,89 +134,3 @@ def install_kopia(prefix: Path | None = None) -> None:
     except (OSError, tarfile.TarError, KopiaVendorError) as exc:
         raise BinaryInstallError(f"failed to extract kopia tarball: {exc}") from exc
     event("info", "installed kopia", path=str(kopia_path), version=KOPIA_VERSION)
-
-
-def _nbdcopy_present(nbdcopy_path: Path) -> bool:
-    """Return True if ``nbdcopy --version`` runs successfully.
-
-    EXACT version match is intentionally NOT required: nbdcopy is a stable
-    libnbd-bin entry point and the system only cares that the binary is
-    callable. A host that already apt-installed libnbd-bin (any version)
-    should not trigger a second-source install.
-    """
-    if not nbdcopy_path.exists():
-        return False
-    try:
-        result = run([str(nbdcopy_path), "--version"], check=False, timeout=10)
-    except (OSError, CommandError):
-        return False
-    return result.returncode == 0
-
-
-def _install_debs(deb_paths: list[Path]) -> None:
-    """``dpkg -i`` the given .debs, falling back to ``apt-get install -f`` on missing deps.
-
-    ``dpkg -i`` cannot resolve transitive dependencies; if it fails because
-    libnbd-bin needs e.g. a libc version that is already present but
-    flagged as broken, ``apt-get install -f -y`` will reach into the apt
-    cache and finish the install. The second call is a no-op when dpkg
-    succeeded on its own.
-    """
-    args = ["dpkg", "-i", *[str(path) for path in deb_paths]]
-    try:
-        run(args, check=True, timeout=300)
-    except CommandError as dpkg_exc:
-        event(
-            "warning",
-            "dpkg -i reported broken dependencies; attempting apt-get install -f",
-            stderr=dpkg_exc.result.stderr.strip(),
-        )
-        try:
-            run(["apt-get", "install", "-f", "-y"], check=True, timeout=600)
-        except CommandError as apt_exc:
-            raise BinaryInstallError(
-                "apt-get install -f failed to repair libnbd-bin dependencies: " f"{apt_exc.result.stderr.strip()}"
-            ) from apt_exc
-
-
-def install_nbdcopy(prefix: Path | None = None) -> None:
-    """Install nbdcopy (libnbd-bin + libnbd0) at the pinned version.
-
-    Idempotent: if ``nbdcopy --version`` runs successfully the install is
-    skipped. Otherwise the pinned .debs are fetched, sha256-verified, and
-    installed via ``dpkg -i`` with an ``apt-get install -f`` fallback for
-    transitive deps.
-
-    The ``prefix`` argument is honored for the idempotency probe path. For
-    non-rooted installs, a runnable ``nbdcopy`` on PATH also satisfies the
-    bootstrap so sandboxed e2e installs do not mutate the host dpkg database.
-    """
-    root = prefix if prefix is not None else Path("/")
-    nbdcopy_path = prefixed("/usr/bin/nbdcopy", root)
-    if _nbdcopy_present(nbdcopy_path):
-        event("info", "nbdcopy already installed; skipping pinned-deb install", path=str(nbdcopy_path))
-        return
-    path_nbdcopy = shutil.which("nbdcopy") if root != Path("/") else None
-    if path_nbdcopy and _nbdcopy_present(Path(path_nbdcopy)):
-        event("info", "nbdcopy available on PATH; skipping pinned-deb install", path=path_nbdcopy)
-        return
-    libnbd0_pin = _BinaryPin(name="libnbd0", url=LIBNBD0_DEB_URL, sha256=LIBNBD0_SHA256)
-    libnbd_bin_pin = _BinaryPin(name="libnbd-bin", url=LIBNBD_BIN_DEB_URL, sha256=LIBNBD_BIN_SHA256)
-    libnbd0_bytes = _fetch_pinned(libnbd0_pin)
-    libnbd_bin_bytes = _fetch_pinned(libnbd_bin_pin)
-    with tempfile.TemporaryDirectory(prefix="libnbd-install-") as tmp_dir:
-        tmp_dir_path = Path(tmp_dir)
-        libnbd0_path = tmp_dir_path / f"libnbd0_{LIBNBD_VERSION}_amd64.deb"
-        libnbd_bin_path = tmp_dir_path / f"libnbd-bin_{LIBNBD_VERSION}_amd64.deb"
-        libnbd0_path.write_bytes(libnbd0_bytes)
-        libnbd_bin_path.write_bytes(libnbd_bin_bytes)
-        try:
-            _install_debs([libnbd0_path, libnbd_bin_path])
-        finally:
-            # Tempfile cleanup is implicit, but be loud about scrubbing the
-            # downloaded .debs so they cannot linger if the operator
-            # interrupts the install partway through dpkg.
-            for path in (libnbd0_path, libnbd_bin_path):
-                with suppress(FileNotFoundError):
-                    path.unlink()
-    event("info", "installed nbdcopy", version=LIBNBD_VERSION)

@@ -83,6 +83,7 @@ def test_repository_create_filesystem_invocation(tmp_path: Path, monkeypatch: py
         "repository",
         "create",
         "filesystem",
+        "--no-check-for-updates",
         "--path",
         str(repo),
     ]
@@ -110,6 +111,8 @@ def test_repository_connect_filesystem_readonly_flag(tmp_path: Path, monkeypatch
     kopia_client.repository_connect_filesystem(config_file=cfg, repo_path=repo, password_file=password, read_only=True)
     args, _ = captured[0]
     assert args[-1] == "--readonly"
+    # Update checks are disabled persistently in the connection config.
+    assert "--no-check-for-updates" in args
 
 
 def test_repository_status_parses_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

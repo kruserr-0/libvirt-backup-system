@@ -63,14 +63,9 @@ def test_install_bootstraps_kopia_before_peer_password_validation(
         del prefix
         order.append("kopia")
 
-    def fake_install_nbdcopy(prefix: object = None) -> None:
-        del prefix
-        order.append("nbdcopy")
-
     monkeypatch.setenv("BACKUP_PATH", str(backup_path))
     monkeypatch.setattr("libvirt_backup_system.installer.Path.exists", Path.exists)
     monkeypatch.setattr("libvirt_backup_system.installer.install_kopia", fake_install_kopia)
-    monkeypatch.setattr("libvirt_backup_system.installer.install_nbdcopy", fake_install_nbdcopy)
     monkeypatch.setattr(
         "libvirt_backup_system.installer_password.kopia_client.repository_connect_filesystem",
         fake_connect,
@@ -79,7 +74,7 @@ def test_install_bootstraps_kopia_before_peer_password_validation(
 
     assert install(str(tmp_path), password_spec=PasswordSpec(literal="join-pw", acknowledge_loss=True)) == 0
 
-    assert order[:3] == ["kopia", "nbdcopy", "connect-peer"]
+    assert order[:2] == ["kopia", "connect-peer"]
     assert order.count("kopia") == 1
 
 
@@ -101,6 +96,7 @@ def test_install_reports_binary_failure_before_peer_password_validation(
         raise BinaryInstallError("kopia unavailable")
 
     monkeypatch.setenv("BACKUP_PATH", str(backup_path))
+    monkeypatch.setenv("BACKUP_REQUIRE_NFS_MOUNT", "false")
     monkeypatch.setattr("libvirt_backup_system.installer.Path.exists", Path.exists)
     monkeypatch.setattr("libvirt_backup_system.installer.install_kopia", fail_kopia)
 

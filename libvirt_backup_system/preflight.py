@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-import math
 import os
 import secrets
-import shutil
 from pathlib import Path
 
-from . import disk_compat, kopia_repo, preflight_host_id, preflight_kopia_password_file
-from .config import Config, float_value, int_value, split_words
+from . import (
+    disk_compat,
+    installer_deps,
+    kopia_repo,
+    mount_consistency,
+    preflight_host_id,
+    preflight_kopia_password_file,
+)
+from .config import Config
 from .config import prefixed as _prefixed
-from .config_data import CONFIG_KEYS
 from .logging_json import event
 from .preflight_backup_path import (
     WRITE_PROBE_NAME,
@@ -19,15 +23,18 @@ from .preflight_backup_path import (
 )
 from .preflight_estimate import df_available_kb as _df_available_kb
 from .preflight_estimate import estimate_required_kb as _estimate_required_kb
+from .preflight_values import BOOLEAN_KEYS, FLOAT_KEYS, INTEGER_KEYS
+from .preflight_values import validate_booleans as _validate_booleans
+from .preflight_values import validate_floats as _validate_floats
+from .preflight_values import validate_integers as _validate_integers
+from .preflight_values import validate_required_present as _validate_required_present
+from .preflight_values import validate_vm_blacklist as _validate_vm_blacklist
 from .storage import subpath_is_safe
-from .vms import is_safe_vm_uuid, list_vms
+from .vms import list_vms
+
+__all__ = ["BOOLEAN_KEYS", "FLOAT_KEYS", "INTEGER_KEYS", "REQUIRED_BINARIES", "check", "validate_config"]
 
 REQUIRED_BINARIES = ["virsh", "qemu-nbd", "nbdcopy", "qemu-img", "df", "kopia"]
-BOOLEAN_KEYS = frozenset(("BACKUP_REQUIRE_NFS_MOUNT", "REQUIRE_ROOT"))
-INTEGER_KEYS = frozenset(
-    "COMMAND_TIMEOUT_SECONDS KEEP_ANNUAL KEEP_DAILY KEEP_HOURLY KEEP_LATEST KEEP_MONTHLY KEEP_WEEKLY KOPIA_PARALLELISM SPACE_MARGIN_PERCENT".split()  # noqa: E501
-)
-FLOAT_KEYS = frozenset(("BACKUP_ESTIMATE_GB_PER_VM",))
 ALLOWED_LIBVIRT_URI_PREFIXES = tuple("qemu:/// qemu+unix:// test:// test:///".split())
 REMOTE_LIBVIRT_URI_PREFIXES = tuple("qemu+ssh:// qemu+tcp:// qemu+tls://".split())
 SCRATCH_DIR = Path("/var/tmp")  # noqa: S108 - filesystem scratch dir for write probes.
@@ -48,58 +55,6 @@ prefixed = _prefixed
 
 def validate_libvirt_uri(uri: str) -> bool:
     return uri.startswith(ALLOWED_LIBVIRT_URI_PREFIXES) and not uri.startswith(REMOTE_LIBVIRT_URI_PREFIXES)
-
-
-def _validate_required_present(config: Config) -> list[str]:
-    optional_keys = {"KOPIA_REPO_PATH", "VM_BLACKLIST"}
-    failures = [f"{k} must not be empty" for k in sorted(CONFIG_KEYS - optional_keys) if not config.get(k).strip()]
-    host_id = config.get("HOST_ID")
-    host_failure = preflight_host_id.validation_failure(host_id, allow_empty=True)
-    if host_failure is not None:
-        failures.append(host_failure)
-    return failures
-
-
-def _validate_vm_blacklist(config: Config) -> list[str]:
-    bad = [entry for entry in split_words(config.get("VM_BLACKLIST")) if not is_safe_vm_uuid(entry)]
-    return [f"VM_BLACKLIST contains invalid VM UUID: {entry!r}" for entry in bad]
-
-
-def _validate_booleans(config: Config) -> list[str]:
-    valid = {"1", "true", "yes", "on", "0", "false", "no", "off"}
-    bad = [key for key in sorted(BOOLEAN_KEYS) if config.get(key).strip().lower() not in valid]
-    return [f"{key} must be a boolean value" for key in bad]
-
-
-def _validate_integers(config: Config) -> list[str]:
-    failures: list[str] = []
-    for key in sorted(INTEGER_KEYS):
-        try:
-            value = int_value(config.values, key)
-        except ValueError:
-            failures.append(f"{key} must be an integer")
-            continue
-        if key == "COMMAND_TIMEOUT_SECONDS" and value <= 0:
-            failures.append("COMMAND_TIMEOUT_SECONDS must be greater than 0")
-        elif key != "COMMAND_TIMEOUT_SECONDS" and value < 0:
-            failures.append(f"{key} must be greater than or equal to 0")
-    return failures
-
-
-def _validate_floats(config: Config) -> list[str]:
-    failures: list[str] = []
-    for key in sorted(FLOAT_KEYS):
-        try:
-            value = float_value(config.values, key)
-        except ValueError:
-            failures.append(f"{key} must be a number")
-            continue
-        if not math.isfinite(value):
-            failures.append(f"{key} must be a finite number")
-            continue
-        if value < 0:
-            failures.append(f"{key} must be greater than or equal to 0")
-    return failures
 
 
 def _validate_scratch_dir() -> list[str]:
@@ -246,6 +201,7 @@ def repo_creation_failures(config: Config) -> list[str]:
     bool_failures = _validate_booleans(config)
     failures.extend(bool_failures)
     failures.extend([] if bool_failures else validate_backup_path_writable(config))
+    failures.extend([] if bool_failures else mount_consistency.consistency_failures(config))
     failures.extend(_validate_kopia_repo_path(config))
     return failures
 
@@ -256,8 +212,10 @@ def collect_check_failures(config: Config, *, lock_held: bool = False) -> tuple[
         failures.extend(stamp_host_id_on_first_run(config))
     elif not lock_held:
         failures.extend(host_id_drift_failures(config))
-    failures.extend(f"missing binary: {binary}" for binary in REQUIRED_BINARIES if not shutil.which(binary))
+    failures.extend(installer_deps.required_binary_failures(REQUIRED_BINARIES, config.prefix))
     failures.extend(_validate_scratch_dir())
+    if not _validate_booleans(config):
+        failures.extend(mount_consistency.consistency_failures(config))
     failures.extend(_validate_kopia_password_file(config))
     failures.extend(_validate_local_kopia_repo(config, require_existing=True))
     failures.extend(_validate_peer_kopia_repos(config))
@@ -290,5 +248,9 @@ def check(config: Config, *, lock_held: bool = False) -> int:
         event("error", "preflight failed", reason=failure)
     if failures:
         return 1
+    if lock_held:
+        # First node (or first run after upgrade): publish this host's fstab
+        # entry so later joins are validated against it. First writer wins.
+        mount_consistency.record_local_mount(config)
     event("info", "check passed", vm_count=vm_count, required_kb=required_kb)
     return 0

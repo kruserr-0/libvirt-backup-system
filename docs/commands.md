@@ -2,11 +2,14 @@
 
 ## `install`
 
-Installs the package copy, wrapper script, config file, fish completion, and
-systemd units when `BACKUP_PATH` is configured. Writes the shared kopia
+Installs the package copy, wrapper script, config file, fish completion,
+and systemd units when `BACKUP_PATH` is configured; writes the shared kopia
 token to `/etc/libvirt-backup-system/kopia.pw` (mode 600 root-owned) and
-creates the local kopia repo at `BACKUP_PATH/<host-id>/kopia-repo/` with the
-global retention/compression policy applied.
+creates the local repo at `BACKUP_PATH/<host-id>/kopia-repo/` with the
+global retention/compression policy applied. It first gates on the system
+dependencies (see [System dependencies](system-deps.md)): interactively it
+offers to apt-install what is missing, otherwise it aborts before modifying
+anything and prints a copy-paste command; `--non-interactive` never prompts.
 
 ```sh
 sudo env BACKUP_PATH=/home/admin/pro/vms/backups libvirt-backup-system install
@@ -22,26 +25,27 @@ shared token automatically. Explicit first writes still require
 token and fails on mismatch; joining with the wrong token also fails when peer
 repos already exist.
 
-When `BACKUP_PATH` is set, a fresh install also syncs the shared config seed at
-`BACKUP_PATH/libvirt-backup.env`: it publishes this host's config if no seed
-exists yet (first node), or pulls the existing seed as the initial local config
-(joining node). See [`update-config`](#update-config) and
-[Joining additional hosts](joining-hosts.md#shared-configuration).
+When `BACKUP_PATH` is set, a fresh install also syncs the shared config seed
+at `BACKUP_PATH/libvirt-backup.env`: the first node publishes its config, a
+joining node pulls the existing seed. See [`update-config`](#update-config).
 
 ## `add-node`
 
-Prints a pasteable command for joining another host to the same `BACKUP_PATH`
-and shared token:
+Prints a pasteable command joining another host to this backup set:
 
 ```sh
 sudo libvirt-backup-system add-node
 ```
 
 ```sh
-sudo env BACKUP_PATH=... KOPIA_PW=... python3 -m libvirt_backup_system install --kopia-password-env KOPIA_PW --acknowledge-password-loss
+  sudo env BACKUP_PATH=... KOPIA_PW=... python3 -m libvirt_backup_system install --kopia-password-env KOPIA_PW --acknowledge-password-loss
 ```
 
-Run it on the new host from a checkout; see [Joining additional hosts](joining-hosts.md).
+The two leading spaces are intentional: pasting into a
+`HISTCONTROL=ignorespace`/`ignoreboth` shell (the Debian/Ubuntu bash
+default) or into fish keeps the token out of history. The joining host must
+mount the same NFS export (same server IP, path, fstab options) as the
+existing nodes — see [Mount consistency](joining-hosts.md#mount-consistency-across-nodes).
 
 ## `show-token`
 
@@ -62,18 +66,14 @@ sudo libvirt-backup-system start          # apply locally
 sudo libvirt-backup-system update-config  # publish for future joins
 ```
 
-The shared config is a *seed*, not a live-synced file. The first node publishes
-it automatically (during `install` when `BACKUP_PATH` is set, and on `start`);
-a node joining the same `BACKUP_PATH` pulls it as its initial local config so it
-inherits retention, splitter, compression, NFS policy, and the backup schedule
-without re-typing them. After joining, the local config is independent — edit it
-and run `start` to change only that host (its own timer, mount path, etc.)
-without touching the seed.
-
-Run `update-config` whenever you want this host's current config to become the
-template that future joins inherit; the most recent `update-config` from any
-host wins. `HOST_ID` is never shared (it scopes the per-host repo, so each node
-keeps its own). See [Joining additional hosts](joining-hosts.md#shared-configuration).
+The shared config is a *seed*, not a live-synced file: the first node
+publishes it automatically, a joining node pulls it as its initial local
+config, and after joining each host's config is independent. Run
+`update-config` whenever this host's current config should become the
+template that future joins inherit (last writer wins; `HOST_ID` is never
+shared). It also re-records the shared fstab entry for the backup mount —
+the documented step after deliberately changing the NFS server address. See
+[Joining additional hosts](joining-hosts.md#shared-configuration).
 
 ## `change-password`
 

@@ -29,6 +29,14 @@ sudo libvirt-backup-system show-token
 
 ## New host
 
+Before joining, mount the shared backup storage on the new host **the same
+way the existing nodes mount it**: the same NFS export from the same server
+address, at the same path, with the same `/etc/fstab` options. The simplest
+way is to copy the fstab line from a working node. Preflight records the
+first node's fstab entry in the backup tree and fails on any node whose
+fstab disagrees (see `BACKUP_REQUIRE_FSTAB_CONSISTENCY` in the
+[configuration reference](env-vars.md)).
+
 On an already installed host, print the join command:
 
 ```sh
@@ -38,8 +46,12 @@ sudo libvirt-backup-system add-node
 The output is a pasteable command in this shape:
 
 ```sh
-sudo env BACKUP_PATH=... KOPIA_PW=... python3 -m libvirt_backup_system install --kopia-password-env KOPIA_PW --acknowledge-password-loss
+  sudo env BACKUP_PATH=... KOPIA_PW=... python3 -m libvirt_backup_system install --kopia-password-env KOPIA_PW --acknowledge-password-loss
 ```
+
+The command is printed with two leading spaces on purpose: pasting it into
+bash with `HISTCONTROL=ignorespace`/`ignoreboth` (the Debian/Ubuntu default)
+or into fish keeps the embedded token out of shell history.
 
 Run that command on the new KVM host from a checkout of this project. It uses
 the same shared token but creates a separate repo for the new host:
@@ -106,6 +118,26 @@ sudo libvirt-backup-system update-config  # publish for future joins
 
 `update-config` overwrites the seed (last writer wins). It only affects hosts
 that join *after* it runs; already-joined hosts keep their independent config.
+
+## Mount consistency across nodes
+
+Alongside the config seed, the first node records its `/etc/fstab` entry for
+the backup mount into `BACKUP_PATH/libvirt-backup-mounts.json`. Preflight on
+every node then verifies:
+
+- the local fstab entry matches the recorded one — same upstream server
+  (same IP/export), same filesystem type, same mount options; and
+- the live mount (`/proc/self/mounts`) matches fstab, so an edited but
+  not-yet-remounted fstab is caught.
+
+A mismatch fails preflight before any backup is attempted, and the error
+prints both fstab entries so the operator can inspect them or simply copy
+the fstab line from a working, already-joined node.
+
+**Changing the NFS server address** (new IP, migrated NAS): update
+`/etc/fstab` on ALL nodes, remount, then run `update-config` on one node —
+it re-records the shared fstab entry along with the config seed. The check
+is controlled by `BACKUP_REQUIRE_FSTAB_CONSISTENCY` (enabled by default).
 
 ## Wrong token behavior
 

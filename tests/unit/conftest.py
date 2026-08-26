@@ -80,25 +80,20 @@ def _test_password_files_look_root_owned(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.fixture(autouse=True)
 def _stub_install_binaries(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Replace ``installer.install_kopia`` / ``install_nbdcopy`` with no-ops.
+    """Replace ``installer.install_kopia`` with a no-op.
 
     Every ``install(str(tmp_path))`` path now hits the pinned-binary
-    bootstrap (``installer_binaries.install_kopia`` + ``install_nbdcopy``),
-    which would otherwise reach out to ``github.com`` / ``deb.debian.org``
-    in unit tests. The autouse stub keeps the existing test surface intact
-    while the dedicated ``test_installer_binaries.py`` suite exercises the
-    real implementation through monkeypatched ``urllib.request`` /
-    ``shell.run``.
+    bootstrap (``installer_binaries.install_kopia``), which would otherwise
+    reach out to ``github.com`` in unit tests. The autouse stub keeps the
+    existing test surface intact while the dedicated
+    ``test_installer_binaries.py`` suite exercises the real implementation
+    through monkeypatched ``urllib.request`` / ``shell.run``.
     """
 
     def fake_install_kopia(prefix: object = None) -> None:
         return None
 
-    def fake_install_nbdcopy(prefix: object = None) -> None:
-        return None
-
     monkeypatch.setattr("libvirt_backup_system.installer.install_kopia", fake_install_kopia)
-    monkeypatch.setattr("libvirt_backup_system.installer.install_nbdcopy", fake_install_nbdcopy)
 
 
 @pytest.fixture(autouse=True)

@@ -56,11 +56,38 @@ systemd `OnCalendar` value used when the backup timer is installed. Run
 `start` after changing this so the backup timer is refreshed and reloaded.
 
 ```
-BACKUP_REQUIRE_NFS_MOUNT=false
+BACKUP_REQUIRE_NFS_MOUNT=true
 ```
 
-Require `BACKUP_PATH` to be a mounted filesystem. Disabled by default so
-intentionally local backup directories work.
+Require `BACKUP_PATH` to be a mounted filesystem, usually an NFS/QNAP mount.
+**Enabled by default**: preflight fails when the mount is missing, and every
+filesystem mutation during a run re-checks that the mount is still live (a
+stale NFS handle counts as "not mounted"), so a dropped mount can never
+silently send backups to the local disk. Set to `false` only for
+intentionally local backup directories.
+
+```
+BACKUP_REQUIRE_FSTAB_CONSISTENCY=true
+```
+
+Require every node's `/etc/fstab` entry for the `BACKUP_PATH` mount to match
+the entry recorded in the backup tree
+(`BACKUP_PATH/libvirt-backup-mounts.json`): same upstream server (same
+IP/export), same filesystem type, same mount options (order-insensitive).
+The live mount is also compared against fstab so an edited-but-not-remounted
+fstab is caught. Mismatches fail preflight before any backup is attempted,
+and the error prints both fstab entries so you can copy the line from a
+working joined node.
+
+The first node records its fstab entry automatically (on `install` and on the
+first successful `run`); joining nodes are validated against it. With a
+single node the check only fires once that node's own fstab drifts from what
+it recorded.
+
+**If you change the NFS server address**: update `/etc/fstab` on ALL nodes,
+remount, then run `update-config` on one node to re-record the shared entry.
+Until then, preflight fails on every node whose fstab no longer matches the
+recorded entry. Enabled by default; set to `false` to disable the check.
 
 ```
 REQUIRE_ROOT=true

@@ -3,16 +3,17 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from . import config_sync, kopia_password, kopia_repo, preflight
+from . import config_sync, installer_deps, kopia_password, kopia_repo, mount_consistency, preflight
 from .config import Config, default_config_path, prefixed, root_prefix
 from .fish_completion import install_fish_completion
-from .installer_binaries import BinaryInstallError, install_kopia, install_nbdcopy
+from .installer_binaries import BinaryInstallError, install_kopia
 from .installer_helpers import INSTALL_TIME_ENV_KEYS
 from .installer_helpers import install_backup_path_configured as _install_backup_path_configured
 from .installer_helpers import install_package as _install_package
 from .installer_helpers import install_without_backup_path as _install_without_backup_path
 from .installer_helpers import log_dropped_install_time_env as _log_dropped_install_time_env
 from .installer_helpers import print_install_next_steps as _print_install_next_steps
+from .installer_helpers import render_units as _render_units
 from .installer_helpers import write_initial_config as _write_initial_config
 from .installer_helpers import write_wrapper as _write_wrapper
 from .installer_password import install_password as _install_password
@@ -22,19 +23,12 @@ from .logging_json import event
 from .shell import configure_default_timeout
 from .systemd_templates import UNIT_SERVICE, UNIT_TIMER
 from .systemd_units import (
-    KOPIA_FULL_MAINTENANCE_INTERVAL,
-    KOPIA_TIMER_ON_ACTIVE_SEC,
-    KOPIA_UNIT_DESCRIPTIONS,
     MAINTENANCE_FULL_TIMER_NAME,
     MAINTENANCE_FULL_UNIT_NAME,
     MAINTENANCE_TIMER_NAME,
     MAINTENANCE_UNIT_NAME,
     VERIFY_TIMER_NAME,
     VERIFY_UNIT_NAME,
-    render_unit_interval_timer,
-    render_unit_kopia_service,
-    render_unit_service,
-    render_unit_timer,
     run_systemctl,
     systemctl_available,
     validate_systemd_path,
@@ -48,8 +42,16 @@ def install(
     *,
     config_path: str | None = None,
     password_spec: kopia_password.PasswordSpec | None = None,
+    non_interactive: bool = False,
 ) -> int:
     root = root_prefix(prefix)
+    # System dependencies gate the whole install and run before anything is
+    # mutated: a missing dependency aborts cleanly with a copy-paste install
+    # command for the detected OS release instead of leaving a half-installed
+    # system behind.
+    deps_code = installer_deps.ensure_system_deps(root, non_interactive=non_interactive)
+    if deps_code != 0:
+        return deps_code
     try:
         resolved_config = Path(config_path).expanduser() if config_path else default_config_path(root)
         validate_systemd_path(resolved_config, "config_path")
@@ -103,7 +105,16 @@ def install(
             install_code = _install_locked(root, resolved_config, cfg, joining=joining)
             if install_code != 0:
                 return install_code
-            return _ensure_kopia_repo(cfg) if password_required else 0
+            if password_required:
+                repo_code = _ensure_kopia_repo(cfg)
+                if repo_code != 0:
+                    return repo_code
+            if cfg.get("BACKUP_PATH").strip():
+                # First node: publish this host's fstab entry for the backup
+                # mount so joining nodes are validated against it (the join
+                # itself was already validated in _repo_preflight above).
+                mount_consistency.record_local_mount(cfg)
+            return 0
     except LockBusyError as exc:
         event("error", "another run in progress", lock_path=str(exc.path))
         return 1
@@ -112,7 +123,6 @@ def install(
 def _install_pinned_binaries(root: Path) -> int:
     try:
         install_kopia(prefix=root)
-        install_nbdcopy(prefix=root)
     except BinaryInstallError as exc:
         event("error", "pinned binary install failed", error=str(exc))
         return 1
@@ -218,58 +228,6 @@ def _install_locked(root: Path, resolved_config: Path, cfg: Config, *, joining: 
         event("info", "systemd reload skipped", root_prefix=str(root))
         return 0
     return 0 if run_systemctl(root, [["systemctl", "daemon-reload"]]) else 1
-
-
-def _render_units(cfg: Config, root: Path, bin_path: Path, resolved_config: Path) -> dict[str, str]:
-    backup_path = cfg.get("BACKUP_PATH").strip()
-    try:
-        service_text = render_unit_service(backup_path, bin_path, resolved_config, subcommand="run")
-        check_service_text = render_unit_service(backup_path, bin_path, resolved_config, subcommand="check")
-        maintenance_service = render_unit_kopia_service(
-            bin_path,
-            resolved_config,
-            kind="maintenance",
-            backup_path=backup_path,
-        )
-        maintenance_full_service = render_unit_kopia_service(
-            bin_path,
-            resolved_config,
-            kind="maintenance-full",
-            backup_path=backup_path,
-        )
-        verify_service = render_unit_kopia_service(bin_path, resolved_config, kind="verify", backup_path=backup_path)
-    except ValueError as exc:
-        event("error", "invalid systemd unit path", error=str(exc))
-        return {}
-    timer_text = render_unit_timer(root, cfg.get("SYSTEMD_ON_CALENDAR"))
-    maintenance_timer = render_unit_interval_timer(
-        description=KOPIA_UNIT_DESCRIPTIONS["maintenance"],
-        interval=cfg.get("KOPIA_MAINTENANCE_INTERVAL"),
-        on_active_sec=KOPIA_TIMER_ON_ACTIVE_SEC["maintenance"],
-    )
-    maintenance_full_timer = render_unit_interval_timer(
-        description=KOPIA_UNIT_DESCRIPTIONS["maintenance-full"],
-        interval=KOPIA_FULL_MAINTENANCE_INTERVAL,
-        on_active_sec=KOPIA_TIMER_ON_ACTIVE_SEC["maintenance-full"],
-    )
-    verify_timer = render_unit_interval_timer(
-        description=KOPIA_UNIT_DESCRIPTIONS["verify"],
-        interval=cfg.get("KOPIA_VERIFY_INTERVAL"),
-        on_active_sec=KOPIA_TIMER_ON_ACTIVE_SEC["verify"],
-    )
-    if timer_text is None or maintenance_timer is None or maintenance_full_timer is None or verify_timer is None:
-        return {}
-    return {
-        "service": service_text,
-        "check": check_service_text,
-        "timer": timer_text,
-        "maintenance_service": maintenance_service,
-        "maintenance_timer": maintenance_timer,
-        "maintenance_full_service": maintenance_full_service,
-        "maintenance_full_timer": maintenance_full_timer,
-        "verify_service": verify_service,
-        "verify_timer": verify_timer,
-    }
 
 
 def uninstall(

@@ -51,5 +51,8 @@ def add_node(config: Config) -> int:
             "--acknowledge-password-loss",
         ]
     )
-    print(command, flush=True)
+    # Two leading spaces: pasting the command into bash with
+    # HISTCONTROL=ignorespace/ignoreboth (the Debian/Ubuntu default) or into
+    # fish keeps the embedded kopia token out of shell history.
+    print(f"  {command}", flush=True)
     return 0

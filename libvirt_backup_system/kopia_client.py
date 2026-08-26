@@ -101,7 +101,18 @@ def repository_create_filesystem(
     object_splitter: str | None = None,
 ) -> None:
     repo_path.mkdir(parents=True, exist_ok=True)
-    args = [*build_config_args(config_file), "repository", "create", "filesystem", "--path", str(repo_path)]
+    # --no-check-for-updates persists into the connection config so even a
+    # manual ``kopia --config-file=...`` run never phones home or tries to
+    # self-update; versions are pinned deliberately by the installer.
+    args = [
+        *build_config_args(config_file),
+        "repository",
+        "create",
+        "filesystem",
+        "--no-check-for-updates",
+        "--path",
+        str(repo_path),
+    ]
     if object_splitter is not None:
         args.extend(["--object-splitter", object_splitter])
     run_kopia(
@@ -119,7 +130,17 @@ def repository_connect_filesystem(
     cache_dir: Path | None = None,
     read_only: bool = False,
 ) -> None:
-    args = [*build_config_args(config_file), "repository", "connect", "filesystem", "--path", str(repo_path)]
+    # See repository_create_filesystem: persist the no-update-check choice
+    # into the connection config written by ``repository connect``.
+    args = [
+        *build_config_args(config_file),
+        "repository",
+        "connect",
+        "filesystem",
+        "--no-check-for-updates",
+        "--path",
+        str(repo_path),
+    ]
     if read_only:
         args.append("--readonly")
     run_kopia(args, password_file=password_file, cache_dir=cache_dir)

@@ -48,6 +48,13 @@ def fake_systemd_root(tmp_path: Path, monkeypatch) -> None:
 
     fake_prefixed = lambda path, root: tmp_path / str(path).lstrip("/")  # noqa: E731
     monkeypatch.setattr("libvirt_backup_system.installer.root_prefix", lambda prefix=None: Path("/"))
+    # root_prefix is forced to "/" above, which would make the system
+    # dependency gate probe the real host; these tests exercise the systemd
+    # surface, not the deps gate.
+    monkeypatch.setattr(
+        "libvirt_backup_system.installer.installer_deps.ensure_system_deps",
+        lambda root, non_interactive=False: 0,
+    )
     monkeypatch.setattr("libvirt_backup_system.installer.prefixed", fake_prefixed)
     monkeypatch.setattr("libvirt_backup_system.installer_uninstall.prefixed", fake_prefixed)
     monkeypatch.setattr("libvirt_backup_system.systemd_units.prefixed", fake_prefixed)

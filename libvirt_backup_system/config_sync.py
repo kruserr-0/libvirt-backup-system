@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from . import mount_consistency
 from .config import Config, parse_env_file
 from .config_data import DEFAULTS
 from .logging_json import event
@@ -141,4 +142,9 @@ def update_shared_config(config: Config) -> int:
         event("error", "failed to publish shared config", path=str(dest), error=str(exc))
         return 1
     event("info", "published shared config", path=str(dest))
+    # Also re-record this host's fstab entry for the backup mount: after a
+    # deliberate change (e.g. a new NFS server address rolled out to every
+    # node), update-config is the documented way to refresh the shared entry
+    # that BACKUP_REQUIRE_FSTAB_CONSISTENCY validates against.
+    mount_consistency.record_local_mount(config, overwrite=True)
     return 0

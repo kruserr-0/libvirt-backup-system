@@ -3,24 +3,22 @@
 ## Prerequisites
 
 The CLI shells out to `virsh`, `qemu-nbd`, `nbdcopy`, `qemu-img`, `df`, and
-`kopia`. The installer takes care of `kopia` and `nbdcopy`
-automatically (see [Bundled binary install](#bundled-binary-install)
-below); you only need the libvirt + qemu tooling on the host beforehand.
+`kopia`. The installer takes care of `kopia` itself (see
+[Bundled binary install](#bundled-binary-install) below); the rest come from
+OS packages. `install` detects the Debian/Ubuntu release, checks the
+dependencies **before touching anything**, and either apt-installs them with
+your explicit consent (sudo is used only for the apt-get commands) or aborts
+cleanly with a copy-paste command for your release — it never installs OS
+packages without consent and never side-loads packages built for a different
+release. `check` re-validates the same binaries on every run, including that
+each one actually executes.
 
-### Debian 12 (bookworm) and Debian 13 (trixie)
-
-```sh
-sudo apt update
-sudo apt install -y libvirt-clients qemu-utils libnbd-bin
-```
-
-`qemu-utils` provides `qemu-img` and `qemu-nbd`.
-
-### Ubuntu 22.04 (jammy), 24.04 (noble)
+See [System dependencies](system-deps.md) for the full behavior, the
+`--non-interactive` flag, and the per-release apt commands:
 
 ```sh
-sudo apt update
-sudo apt install -y libvirt-clients qemu-utils libnbd-bin
+sudo apt-get update
+sudo apt-get install -y libvirt-clients qemu-utils libnbd-bin
 ```
 
 ## Install
@@ -34,9 +32,17 @@ file, and creates this host's repo with that token:
 sudo env BACKUP_PATH=/home/admin/pro/vms/backups python3 -m libvirt_backup_system install
 ```
 
-Local backup directories are allowed by default. To require `BACKUP_PATH` to be
-a mounted filesystem, set `BACKUP_REQUIRE_NFS_MOUNT=true` in
-`/etc/libvirt-backup-system/libvirt-backup.env`.
+`BACKUP_PATH` must be a mounted shared filesystem (NFS) by default
+(`BACKUP_REQUIRE_NFS_MOUNT=true`): preflight and every filesystem mutation
+verify the mount is actually live so a dropped mount can never silently send
+backups to the local disk. Preflight also verifies every node's `/etc/fstab`
+entry for the backup mount matches the entry recorded by the first node —
+same NFS server address, fstype, and options
+(`BACKUP_REQUIRE_FSTAB_CONSISTENCY`; if the server address changes, update
+`/etc/fstab` on ALL nodes, remount, and run `update-config` on one node).
+For an intentionally local backup directory set
+`BACKUP_REQUIRE_NFS_MOUNT=false`; see the
+[configuration reference](env-vars.md).
 
 Save the generated token in a password manager:
 
@@ -110,7 +116,8 @@ sudo libvirt-backup-system doctor
 
 The first install leaves `BACKUP_PATH` blank unless it is supplied in the
 environment. `BACKUP_REQUIRE_NFS_MOUNT` is also honored during first install
-so operators can opt into mount-point preflight in the same copy-paste command.
+so operators can opt out of the (default-on) mount-point preflight in the
+same copy-paste command, e.g. for a local test directory.
 Other keys (for example `HOST_ID` and `KOPIA_COMPRESSION`) are written as
 commented defaults in `libvirt-backup.env` and are silently ignored at install
 time, because the systemd unit only reads the env file. Set those by editing
@@ -224,16 +231,22 @@ On first install the orchestrator uses the vendored pinned `kopia` tarball
 under `libvirt_backup_system/vendor/kopia/`, sha256-verifies it against the
 constant in `libvirt_backup_system/kopia_vendor.py`, and installs it via an
 atomic move to `/usr/local/bin/kopia`. If the vendored tarball is absent, it
-falls back to downloading the same pinned upstream release asset.
+falls back to downloading the same pinned upstream release asset. The step is
+idempotent: if `kopia --version` already reports the pinned version, the
+install skips unnecessary work. Bumping the pinned version is a deliberate
+operator action — the matching sha256 and vendored artifact must be refreshed
+in the same commit.
 
-The installer also fetches pinned `libnbd-bin` and `libnbd0` `.deb` artifacts
-from the Debian archive, sha256-verifies them against constants baked into
-`libvirt_backup_system/installer_binaries.py`, and installs them with
-`dpkg -i` (with `apt-get install -f` fallback). The step is idempotent: if
-`kopia --version` already reports the pinned version and `nbdcopy --version`
-runs successfully, the install skips unnecessary work. Bumping the pinned
-versions is a deliberate operator action — the matching sha256 and vendored
-artifact must be refreshed in the same commit.
+Kopia's automatic update checking is disabled everywhere: every managed
+invocation runs with `KOPIA_CHECK_FOR_UPDATES=false`, and repositories are
+created/connected with `--no-check-for-updates` so the setting persists into
+the connection config — even a manual `kopia --config-file=...` run against a
+managed repo never phones home or self-updates and later breaks the pinned
+setup.
+
+`nbdcopy` and the libvirt/qemu tooling are deliberately **not** bundled:
+they come from the host OS's own package repositories via the dependency
+check in [System dependencies](system-deps.md).
 
 After installing this project with `BACKUP_PATH` configured, run
 `sudo libvirt-backup-system check` to confirm every required binary resolves
@@ -248,9 +261,9 @@ guest setup and application freeze-hook guidance.
 
 ### Offline / air-gapped install
 
-When outbound HTTPS to `github.com` / `deb.debian.org` is not available,
-pre-place the binaries by hand and the installer will detect them and
-skip the bundled-install step:
+When outbound HTTPS to `github.com` is not available and the vendored kopia
+tarball is absent, pre-place the binary by hand and the installer will detect
+it and skip the bundled-install step:
 
 ```sh
 # kopia: download elsewhere, verify the upstream sha256, then copy to
@@ -258,14 +271,17 @@ skip the bundled-install step:
 # installer pins.
 sudo install -m 0755 -o root -g root /path/to/kopia /usr/local/bin/kopia
 kopia --version
+```
 
-# nbdcopy: install via the host's package manager once a mirror is
-# available, or copy + dpkg -i the pinned .debs you mirrored ahead of time.
-sudo apt install -y libnbd-bin
+The OS-package dependencies (`libvirt-clients`, `qemu-utils`, `libnbd-bin`)
+must come from your local mirror:
+
+```sh
+sudo apt-get install -y libvirt-clients qemu-utils libnbd-bin
 nbdcopy --version
 ```
 
-With both binaries present and runnable, `sudo libvirt-backup-system install`
+With everything present and runnable, `sudo libvirt-backup-system install`
 proceeds straight to the token + repo + systemd-unit setup.
 
 ## Uninstall

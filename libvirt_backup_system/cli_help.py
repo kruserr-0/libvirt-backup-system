@@ -9,6 +9,30 @@ lines matter.
 
 from __future__ import annotations
 
+# Re-exported: install/add-node/show-token/update-config help lives in
+# cli_help_install (LOC ceiling) but stays addressable as cli_help.*.
+from .cli_help_install import (
+    ADD_NODE_DESCRIPTION,
+    ADD_NODE_HELP,
+    INSTALL_DESCRIPTION,
+    INSTALL_HELP,
+    SHOW_TOKEN_HELP,
+    UPDATE_CONFIG_DESCRIPTION,
+    UPDATE_CONFIG_HELP,
+)
+
+__all__ = [
+    "ADD_NODE_DESCRIPTION",
+    "ADD_NODE_HELP",
+    "CHECK_DESCRIPTION",
+    "CHECK_HELP",
+    "INSTALL_DESCRIPTION",
+    "INSTALL_HELP",
+    "SHOW_TOKEN_HELP",
+    "UPDATE_CONFIG_DESCRIPTION",
+    "UPDATE_CONFIG_HELP",
+]
+
 PROGRAM_DESCRIPTION = """\
 libvirt-backup-system orchestrates kopia-backed backups of every running
 libvirt VM on this host, writing snapshots into a per-host kopia repository
@@ -55,58 +79,6 @@ subcommand. At the top level, no argument, ``help``, and ``?`` are aliases for
 turnkey decision, the staging directory layout, and the safety guarantees."""
 
 
-INSTALL_HELP = "Install the wrapper, config file, package copy, and systemd units."
-INSTALL_DESCRIPTION = """\
-Install libvirt-backup-system: copy the package to /opt/libvirt-backup-system,
-write the /usr/local/bin/libvirt-backup-system wrapper, drop the default
-/etc/libvirt-backup-system/libvirt-backup.env (preserving an existing one),
-render the systemd unit files, lay down the shared kopia token at
-KOPIA_PASSWORD_FILE, and install the fish completion script. The timers are
-NOT enabled automatically -- run ``start`` and then ``check`` after editing
-the env file to initialize the repo and validate the setup.
-
-For a one-shot first install with BACKUP_PATH:
-
-  sudo env BACKUP_PATH=/mnt/qnap-backups libvirt-backup-system install
-
-When no password file exists and no --kopia-password* flag is supplied,
-install generates the shared token automatically. Save it with ``show-token``;
-print a pasteable command for the next host with ``add-node``. Explicit
---kopia-password* values are still accepted and require
---acknowledge-password-loss on first write. If peer repos already exist,
-install validates that the token can decrypt them before creating this
-host's repo."""
-
-
-ADD_NODE_HELP = "Print a pasteable install command for joining another host."
-SHOW_TOKEN_HELP = "Print the shared kopia token from the local password file."
-
-
-UPDATE_CONFIG_HELP = "Publish this host's env config to the backup path as the shared seed for new joins."
-UPDATE_CONFIG_DESCRIPTION = """\
-Copy this host's /etc/libvirt-backup-system/libvirt-backup.env up to the
-backup tree as the shared config seed (BACKUP_PATH/libvirt-backup.env),
-overwriting any previous seed.
-
-The shared config is a *seed*, not a live-synced file. The first node
-publishes it automatically (during ``install`` when BACKUP_PATH is set, and on
-``start``). When a new host joins (``install`` against the same BACKUP_PATH and
-token, e.g. via ``add-node``), it pulls the seed as its initial local config so
-it inherits retention, splitter, compression, and NFS policy without re-typing
-them. After joining, the local config is independent: edit it and run
-``start`` to change only this host (its own backup schedule, mount path, etc.)
-without touching the seed.
-
-Run ``update-config`` whenever you want this host's current config to become
-the template that future joins inherit. The most recent ``update-config`` from
-any host wins. ``HOST_ID`` is never shared -- it scopes the per-host repo, so
-each node keeps its own (falling back to /etc/machine-id).
-
-  sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-  sudo libvirt-backup-system start          # apply locally
-  sudo libvirt-backup-system update-config  # publish for future joins"""
-
-
 UNINSTALL_HELP = "Remove installed files. Config/state/logs/backups are kept unless --purge-* is passed."
 UNINSTALL_DESCRIPTION = """\
 Disable timers, stop services, and remove the installed wrapper, opt package
@@ -124,11 +96,16 @@ CHECK_HELP = "Run preflight: validate config, binaries, paths, and free space."
 CHECK_DESCRIPTION = """\
 Validate the environment before a backup run: config keys are present and
 typed correctly, required binaries (virsh, qemu-nbd, nbdcopy, qemu-img, df,
-kopia) are on PATH, libvirt is reachable, BACKUP_PATH is writable and
-(when BACKUP_REQUIRE_NFS_MOUNT=true) is a mounted filesystem, the scratch
-directory is writable, KOPIA_PASSWORD_FILE exists with mode 600 and (under
-root) is owned by root, and df reports enough free space to satisfy the
-estimated repo growth for selected running VMs.
+kopia) are on PATH *and actually runnable* (a binary with a missing shared
+library fails check instead of passing), libvirt is reachable, BACKUP_PATH
+is writable and (with BACKUP_REQUIRE_NFS_MOUNT=true, the default) is a
+mounted filesystem rather than a local directory, the /etc/fstab entry for
+the backup mount matches the entry recorded by the first node (see
+BACKUP_REQUIRE_FSTAB_CONSISTENCY), the scratch directory is writable,
+KOPIA_PASSWORD_FILE exists with mode 600 and (under root) is owned by root,
+and df reports enough free space to satisfy the estimated repo growth for
+selected running VMs. When binaries are missing, the failure includes the
+apt install command for the detected Debian/Ubuntu release.
 
 ``preflight`` is an alias of ``check``."""
 

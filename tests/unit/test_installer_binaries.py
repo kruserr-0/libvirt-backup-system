@@ -57,11 +57,6 @@ def _pin_kopia_sha256(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> None:
     monkeypatch.setattr(installer_binaries, "KOPIA_SHA256", hashlib.sha256(payload).hexdigest())
 
 
-def _pin_libnbd_sha256(monkeypatch: pytest.MonkeyPatch, libnbd0: bytes, libnbd_bin: bytes) -> None:
-    monkeypatch.setattr(installer_binaries, "LIBNBD0_SHA256", hashlib.sha256(libnbd0).hexdigest())
-    monkeypatch.setattr(installer_binaries, "LIBNBD_BIN_SHA256", hashlib.sha256(libnbd_bin).hexdigest())
-
-
 @pytest.fixture(autouse=True)
 def _disable_vendored_kopia(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(installer_binaries, "vendored_kopia_tarball_bytes", lambda: None)
@@ -290,6 +285,6 @@ def test_install_kopia_wraps_extract_failure(tmp_path: Path, monkeypatch: pytest
     def boom_move(*_args: object, **_kwargs: object) -> None:
         raise OSError("disk full")
 
-    monkeypatch.setattr("libvirt_backup_system.installer_binaries.shutil.move", boom_move)
+    monkeypatch.setattr("libvirt_backup_system.kopia_vendor.shutil.move", boom_move)
     with pytest.raises(BinaryInstallError, match="failed to extract"):
         install_kopia(prefix=tmp_path)

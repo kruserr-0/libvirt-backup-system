@@ -7,14 +7,22 @@ import stat
 import sys
 from pathlib import Path
 
+from .config import Config
 from .logging_json import event
 from .systemd_units import (
+    KOPIA_FULL_MAINTENANCE_INTERVAL,
+    KOPIA_TIMER_ON_ACTIVE_SEC,
+    KOPIA_UNIT_DESCRIPTIONS,
     MAINTENANCE_FULL_TIMER_NAME,
     MAINTENANCE_FULL_UNIT_NAME,
     MAINTENANCE_TIMER_NAME,
     MAINTENANCE_UNIT_NAME,
     VERIFY_TIMER_NAME,
     VERIFY_UNIT_NAME,
+    render_unit_interval_timer,
+    render_unit_kopia_service,
+    render_unit_service,
+    render_unit_timer,
     run_systemctl,
 )
 
@@ -141,6 +149,58 @@ def write_initial_config(path: Path, content: str) -> None:
         os.close(fd)
 
 
+def render_units(cfg: Config, root: Path, bin_path: Path, resolved_config: Path) -> dict[str, str]:
+    backup_path = cfg.get("BACKUP_PATH").strip()
+    try:
+        service_text = render_unit_service(backup_path, bin_path, resolved_config, subcommand="run")
+        check_service_text = render_unit_service(backup_path, bin_path, resolved_config, subcommand="check")
+        maintenance_service = render_unit_kopia_service(
+            bin_path,
+            resolved_config,
+            kind="maintenance",
+            backup_path=backup_path,
+        )
+        maintenance_full_service = render_unit_kopia_service(
+            bin_path,
+            resolved_config,
+            kind="maintenance-full",
+            backup_path=backup_path,
+        )
+        verify_service = render_unit_kopia_service(bin_path, resolved_config, kind="verify", backup_path=backup_path)
+    except ValueError as exc:
+        event("error", "invalid systemd unit path", error=str(exc))
+        return {}
+    timer_text = render_unit_timer(root, cfg.get("SYSTEMD_ON_CALENDAR"))
+    maintenance_timer = render_unit_interval_timer(
+        description=KOPIA_UNIT_DESCRIPTIONS["maintenance"],
+        interval=cfg.get("KOPIA_MAINTENANCE_INTERVAL"),
+        on_active_sec=KOPIA_TIMER_ON_ACTIVE_SEC["maintenance"],
+    )
+    maintenance_full_timer = render_unit_interval_timer(
+        description=KOPIA_UNIT_DESCRIPTIONS["maintenance-full"],
+        interval=KOPIA_FULL_MAINTENANCE_INTERVAL,
+        on_active_sec=KOPIA_TIMER_ON_ACTIVE_SEC["maintenance-full"],
+    )
+    verify_timer = render_unit_interval_timer(
+        description=KOPIA_UNIT_DESCRIPTIONS["verify"],
+        interval=cfg.get("KOPIA_VERIFY_INTERVAL"),
+        on_active_sec=KOPIA_TIMER_ON_ACTIVE_SEC["verify"],
+    )
+    if timer_text is None or maintenance_timer is None or maintenance_full_timer is None or verify_timer is None:
+        return {}
+    return {
+        "service": service_text,
+        "check": check_service_text,
+        "timer": timer_text,
+        "maintenance_service": maintenance_service,
+        "maintenance_timer": maintenance_timer,
+        "maintenance_full_service": maintenance_full_service,
+        "maintenance_full_timer": maintenance_full_timer,
+        "verify_service": verify_service,
+        "verify_timer": verify_timer,
+    }
+
+
 def print_install_next_steps(config_path: Path, bin_path: Path) -> None:
     lines = [
         "",
@@ -150,8 +210,9 @@ def print_install_next_steps(config_path: Path, bin_path: Path) -> None:
         "Set the required backup path, then run start so the systemd unit matches it:",
         "  BACKUP_PATH=/mnt/qnap-backups",
         "",
-        "Local directories are allowed by default. To require a shared/NFS mount, uncomment:",
-        "  BACKUP_REQUIRE_NFS_MOUNT=true",
+        "BACKUP_PATH must be a mounted shared filesystem (NFS) by default. For an",
+        "intentionally local backup directory, uncomment and set:",
+        "  BACKUP_REQUIRE_NFS_MOUNT=false",
         "",
         "Retention is governed by Kopia's policy keys. Defaults keep latest snapshots plus one year.",
         "Tune KEEP_DAILY (and the other KEEP_* keys) in the env file; expired snapshots are pruned by",

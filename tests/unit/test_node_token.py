@@ -41,6 +41,9 @@ def test_cli_add_node_prints_pasteable_install_command(
     assert main(["--prefix", str(tmp_path), "add-node"]) == 0
 
     captured = capsys.readouterr()
+    # Two leading spaces so pasting into a HISTCONTROL=ignorespace/ignoreboth
+    # shell (the Debian/Ubuntu bash default) keeps the token out of history.
+    assert captured.out.startswith("  sudo env ")
     line = captured.out.strip()
     words = shlex.split(line)
     assert words[:2] == ["sudo", "env"]

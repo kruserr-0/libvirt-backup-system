@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from libvirt_backup_system import preflight
+from libvirt_backup_system import installer_deps, preflight
 from libvirt_backup_system.config import Config
 from libvirt_backup_system.vms import VM
 
@@ -56,7 +56,8 @@ def stub_environment(
             raise vms_exc
         return vms if vms is not None else [VM("alpha", "running", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")]
 
-    monkeypatch.setattr(preflight.shutil, "which", fake_which)
+    monkeypatch.setattr(installer_deps.shutil, "which", fake_which)
+    monkeypatch.setattr(installer_deps, "_binary_runs", lambda _path: True)
     monkeypatch.setattr(preflight, "list_vms", fake_list_vms)
     monkeypatch.setattr(preflight, "_df_available_kb", lambda _path: df_kb)
     monkeypatch.setattr(preflight, "_estimate_required_kb", lambda _cfg, _vms: estimate_kb)

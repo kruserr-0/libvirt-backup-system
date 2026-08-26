@@ -15,9 +15,21 @@ to create this host's repo:
 sudo env BACKUP_PATH=/home/admin/pro/vms/backups python3 -m libvirt_backup_system install
 ```
 
-Local backup directories are allowed by default. To require `BACKUP_PATH` to be
-a mounted filesystem, set `BACKUP_REQUIRE_NFS_MOUNT=true` in
-`/etc/libvirt-backup-system/libvirt-backup.env`.
+`install` first checks the system dependencies (`virsh`, `qemu-nbd`,
+`qemu-img`, `nbdcopy`) against your Debian/Ubuntu release and, run
+interactively, offers to apt-install anything missing after confirmation;
+otherwise it aborts before touching the system and prints the copy-paste apt
+command (`--non-interactive` for automation). See
+[Install and prerequisites](docs/install.md).
+
+`BACKUP_PATH` must be a mounted shared filesystem (NFS) by default, and every
+node's `/etc/fstab` entry for that mount must match the entry the first node
+recorded in the backup tree (same server IP, fstype, and options). For an
+intentionally local backup directory, set `BACKUP_REQUIRE_NFS_MOUNT=false` in
+`/etc/libvirt-backup-system/libvirt-backup.env`; the fstab check is governed
+by `BACKUP_REQUIRE_FSTAB_CONSISTENCY`. If the NFS server address ever
+changes, update `/etc/fstab` on ALL nodes, remount, and run `update-config`
+on one node.
 
 Then verify the install, activate the schedules, and run a health check:
 
@@ -129,6 +141,7 @@ default `7d`) checks the local repo on its own cadence.
 ## Docs
 
 - [Install and prerequisites](docs/install.md)
+- [System dependencies](docs/system-deps.md)
 - [Joining additional hosts](docs/joining-hosts.md)
 - [Backup consistency and QEMU guest agent setup](docs/backup-consistency.md)
 - [Configuration reference](docs/env-vars.md)
