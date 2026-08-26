@@ -123,3 +123,28 @@ def test_cli_pull_config_round_trip_with_push(tmp_path: Path) -> None:
     text = config_path.read_text(encoding="utf-8")
     assert "SYSTEMD_ON_CALENDAR=*-*-* 05:05:00" in text
     assert "HOST_ID=node-b" in text
+
+
+def test_push_pull_workflow_is_canonical_across_surfaces(tmp_path: Path) -> None:
+    """The 4-step push/pull workflow reads identically everywhere it appears."""
+    from libvirt_backup_system import cli_help
+
+    model = "flow through the shared NFS tree with an explicit"
+    steps = (
+        "# 1. apply locally",
+        "# 2. publish for the cluster",
+        "# 3. take over the shared config",
+        "# 4. apply locally",
+    )
+    surfaces = {
+        "program epilog": cli_help.PROGRAM_EPILOG,
+        "push-config help": cli_help.PUSH_CONFIG_DESCRIPTION,
+        "pull-config help": cli_help.PULL_CONFIG_DESCRIPTION,
+        "rendered env template": Config.load(prefix=str(tmp_path), apply_env_overrides=False).render_env(),
+    }
+    for name, text in surfaces.items():
+        for step in steps:
+            assert step in text, f"{name} is missing workflow step {step!r}"
+    assert model in cli_help.PROGRAM_DESCRIPTION.replace("\n", " ")
+    for name in ("push-config help", "pull-config help", "rendered env template"):
+        assert model in surfaces[name].replace("\n", " "), f"{name} is missing the model statement"

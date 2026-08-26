@@ -47,8 +47,10 @@ manual ``run`` invocations are only needed for ad-hoc or recovery work.
 Only running VMs are backed up. Offline VMs are logged as ``skipping vm
 because it is offline`` and skipped; bring the VM up to back it up.
 
-Configuration lives in /etc/libvirt-backup-system/libvirt-backup.env. Edit it
-with ``sudoedit`` and then run ``start`` to refresh the systemd units."""
+Configuration lives in /etc/libvirt-backup-system/libvirt-backup.env.
+Config changes flow through the shared NFS tree with an explicit push/pull
+pair: edit + ``start`` + ``push-config`` on one node, then ``pull-config`` +
+``start`` on every other node (see the workflow below)."""
 
 
 PROGRAM_EPILOG = """\
@@ -61,6 +63,16 @@ Common workflows:
     sudo libvirt-backup-system start
     sudo libvirt-backup-system check
     sudo libvirt-backup-system add-node
+
+  Change configuration (flows through the shared NFS tree via push/pull):
+    # on the node you edited:
+    sudoedit /etc/libvirt-backup-system/libvirt-backup.env
+    sudo libvirt-backup-system start        # 1. apply locally
+    sudo libvirt-backup-system push-config  # 2. publish for the cluster
+
+    # on every other node:
+    sudo libvirt-backup-system pull-config  # 3. take over the shared config
+    sudo libvirt-backup-system start        # 4. apply locally
 
   Daily operation:
     sudo libvirt-backup-system status
@@ -204,7 +216,11 @@ libvirt-backup-system-maintenance-full.timer, and
 libvirt-backup-system-verify.timer. This activates the schedules only -- it
 does not run a backup immediately. Use ``start`` after ``install`` and after
 every edit to /etc/libvirt-backup-system/libvirt-backup.env that changes
-BACKUP_PATH or timer settings. Use ``run`` for a manual backup."""
+BACKUP_PATH or timer settings. ``start`` is steps 1 and 4 of the config
+workflow: on the node you edited it applies the change locally (then
+``push-config`` publishes it for the cluster); on every other node it
+applies the config just taken over with ``pull-config``. Use ``run`` for a
+manual backup."""
 
 
 STATUS_HELP = "Print systemctl status for the installed timers and services."

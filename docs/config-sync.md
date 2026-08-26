@@ -1,25 +1,26 @@
 # `push-config` / `pull-config`
 
-Config changes travel through the shared backup tree: `push-config` uploads
-this host's `/etc/libvirt-backup-system/libvirt-backup.env` to
-`BACKUP_PATH/libvirt-backup.env`, and `pull-config` overwrites another
-host's local env file from it. Push on the node you edited, pull on the
-others. (`update-config` is a deprecated alias of `push-config`.)
+## The model
 
-## Run this after every config change
+**Config changes flow through the shared NFS tree with an explicit
+push/pull pair.** `push-config` uploads this host's
+`/etc/libvirt-backup-system/libvirt-backup.env` to
+`BACKUP_PATH/libvirt-backup.env`; `pull-config` overwrites another host's
+local env file from it. You push on the node you edited and pull on every
+other node — nothing is ever live-synced, and a node never changes until it
+pulls. (`update-config` is a deprecated alias of `push-config`.)
 
-**Whenever you change the config, push it — then pull it on the other
-nodes.** The fleet-wide workflow for any edit is always:
+The workflow for **every** config change is always the same four steps:
 
 ```sh
 # on the node you edited:
 sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-sudo libvirt-backup-system start        # 1. apply the change locally
-sudo libvirt-backup-system push-config  # 2. publish it for the cluster
+sudo libvirt-backup-system start        # 1. apply locally
+sudo libvirt-backup-system push-config  # 2. publish for the cluster
 
 # on every other node:
 sudo libvirt-backup-system pull-config  # 3. take over the shared config
-sudo libvirt-backup-system start        # 4. apply it locally
+sudo libvirt-backup-system start        # 4. apply locally
 ```
 
 Skipping `push-config` leaves the shared config stale: other nodes pull

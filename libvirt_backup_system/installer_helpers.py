@@ -224,5 +224,16 @@ def print_install_next_steps(config_path: Path, bin_path: Path) -> None:
         f"  sudo {bin_path} doctor",
         f"  sudo {bin_path} run",
         "",
+        "Config changes flow through the shared NFS tree with an explicit push/pull pair:",
+        "",
+        "  # on the node you edited:",
+        f"  sudoedit {config_path}",
+        f"  sudo {bin_path} start        # 1. apply locally",
+        f"  sudo {bin_path} push-config  # 2. publish for the cluster",
+        "",
+        "  # on every other node:",
+        f"  sudo {bin_path} pull-config  # 3. take over the shared config",
+        f"  sudo {bin_path} start        # 4. apply locally",
+        "",
     ]
     print("\n".join(lines), flush=True)

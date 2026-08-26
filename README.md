@@ -70,19 +70,21 @@ hosts](docs/joining-hosts.md).
 The first node publishes its env config to `BACKUP_PATH/libvirt-backup.env` as
 a shared seed; joining nodes pull it as their initial config (retention,
 splitter, schedule, NFS policy) instead of starting from defaults. After
-joining, each host's config is independent until it pulls. **Run
-`push-config` after every config change, then `pull-config` on the other
-nodes** — see [`push-config` / `pull-config`](docs/config-sync.md):
+joining, each host's config is independent until it pulls.
+
+**Config changes flow through the shared NFS tree with an explicit
+push/pull pair** — push on the node you edited, pull on every other node
+(see [`push-config` / `pull-config`](docs/config-sync.md)):
 
 ```sh
 # on the node you edited:
 sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-sudo libvirt-backup-system start        # apply the change locally
-sudo libvirt-backup-system push-config  # publish it for the cluster
+sudo libvirt-backup-system start        # 1. apply locally
+sudo libvirt-backup-system push-config  # 2. publish for the cluster
 
 # on every other node:
-sudo libvirt-backup-system pull-config  # take over the shared config
-sudo libvirt-backup-system start        # apply it locally
+sudo libvirt-backup-system pull-config  # 3. take over the shared config
+sudo libvirt-backup-system start        # 4. apply locally
 ```
 
 ## Basic use

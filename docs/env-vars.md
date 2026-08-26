@@ -6,6 +6,21 @@ environment override values in this file. Booleans accept (case-insensitive)
 `1`, `true`, `yes`, `on` as true; `0`, `false`, `no`, `off` as false. Any
 other value is rejected by preflight rather than silently coerced.
 
+**Config changes flow through the shared NFS tree with an explicit
+push/pull pair** — whenever you change a value here, roll it out like this
+(see [`push-config` / `pull-config`](config-sync.md)):
+
+```sh
+# on the node you edited:
+sudoedit /etc/libvirt-backup-system/libvirt-backup.env
+sudo libvirt-backup-system start        # 1. apply locally
+sudo libvirt-backup-system push-config  # 2. publish for the cluster
+
+# on every other node:
+sudo libvirt-backup-system pull-config  # 3. take over the shared config
+sudo libvirt-backup-system start        # 4. apply locally
+```
+
 ## Core
 
 ```

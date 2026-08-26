@@ -84,17 +84,18 @@ backup tree as the shared config (BACKUP_PATH/libvirt-backup.env),
 overwriting any previous version, and re-record this host's /etc/fstab
 entry for the backup mount in the shared mount metadata.
 
-RUN THIS AFTER EVERY CONFIG CHANGE, then ``pull-config`` on the other
-nodes. The fleet-wide workflow for any edit is always:
+THE MODEL: config changes flow through the shared NFS tree with an explicit
+push/pull pair. Run this after EVERY config change, then ``pull-config`` on
+the other nodes. The workflow for any edit is always:
 
   # on the node you edited:
   sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-  sudo libvirt-backup-system start        # 1. apply the change locally
-  sudo libvirt-backup-system push-config  # 2. publish it for the cluster
+  sudo libvirt-backup-system start        # 1. apply locally
+  sudo libvirt-backup-system push-config  # 2. publish for the cluster
 
   # on every other node:
   sudo libvirt-backup-system pull-config  # 3. take over the shared config
-  sudo libvirt-backup-system start        # 4. apply it locally
+  sudo libvirt-backup-system start        # 4. apply locally
 
 Skipping push-config leaves the shared config stale: other nodes pull OLD
 settings, and the next host joined with ``add-node`` silently inherits them.
@@ -120,11 +121,21 @@ published by ``push-config`` on another node. Everything is taken over
 except this host's own identity and location: ``HOST_ID`` and
 ``BACKUP_PATH`` keep their local values.
 
-Run this on every other node after a ``push-config``, and follow it with
-``start`` so the systemd units are re-rendered from the new values:
+THE MODEL: config changes flow through the shared NFS tree with an explicit
+push/pull pair -- push on the node you edited, pull on every other node.
+The workflow for any edit is always:
 
-  sudo libvirt-backup-system pull-config
-  sudo libvirt-backup-system start
+  # on the node you edited:
+  sudoedit /etc/libvirt-backup-system/libvirt-backup.env
+  sudo libvirt-backup-system start        # 1. apply locally
+  sudo libvirt-backup-system push-config  # 2. publish for the cluster
+
+  # on every other node:
+  sudo libvirt-backup-system pull-config  # 3. take over the shared config
+  sudo libvirt-backup-system start        # 4. apply locally
+
+Never skip step 4: pull-config only rewrites the env file, and nothing uses
+the new values until ``start`` re-renders and reloads the systemd units.
 
 Fails cleanly when BACKUP_PATH is not configured, when this host has no
 local config yet (run ``install`` first), or when no shared config has been

@@ -111,18 +111,19 @@ back to `/etc/machine-id`).
 
 ### Updating the shared config
 
-**Run `push-config` after every config change, then `pull-config` on the
-other nodes.** The fleet-wide workflow for any edit is always:
+**Config changes flow through the shared NFS tree with an explicit
+push/pull pair** — push on the node you edited, pull on every other node.
+The workflow for any edit is always:
 
 ```sh
 # on the node you edited:
 sudoedit /etc/libvirt-backup-system/libvirt-backup.env
-sudo libvirt-backup-system start        # 1. apply the change locally
-sudo libvirt-backup-system push-config  # 2. publish it for the cluster
+sudo libvirt-backup-system start        # 1. apply locally
+sudo libvirt-backup-system push-config  # 2. publish for the cluster
 
 # on every other node:
 sudo libvirt-backup-system pull-config  # 3. take over the shared config
-sudo libvirt-backup-system start        # 4. apply it locally
+sudo libvirt-backup-system start        # 4. apply locally
 ```
 
 Skipping `push-config` leaves the shared config stale, so pulls and the next

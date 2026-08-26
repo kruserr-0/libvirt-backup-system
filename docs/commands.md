@@ -2,11 +2,11 @@
 
 ## `install`
 
-Installs the package copy, wrapper script, config file, fish completion,
-and systemd units when `BACKUP_PATH` is configured; writes the shared kopia
-token to `/etc/libvirt-backup-system/kopia.pw` (mode 600 root-owned) and
+Installs the package copy, wrapper script, config file, bash/fish
+completions, and systemd units when `BACKUP_PATH` is configured; writes the
+shared kopia token to `/etc/libvirt-backup-system/kopia.pw` (mode 600) and
 creates the local repo at `BACKUP_PATH/<host-id>/kopia-repo/` with the
-global retention/compression policy applied. It first gates on the system
+retention/compression policy applied. It first gates on the system
 dependencies (see [System dependencies](system-deps.md)): interactively it
 offers to apt-install what is missing, otherwise it aborts before modifying
 anything and prints a copy-paste command; `--non-interactive` never prompts.
@@ -25,10 +25,9 @@ shared token automatically. Explicit first writes still require
 token and fails on mismatch; joining with the wrong token also fails when peer
 repos already exist.
 
-When `BACKUP_PATH` is set, a fresh install also syncs the shared config seed
-at `BACKUP_PATH/libvirt-backup.env`: the first node publishes its config, a
-joining node pulls the existing seed. See
-[`push-config` / `pull-config`](#push-config--pull-config).
+When `BACKUP_PATH` is set, a fresh install also syncs the shared config at
+`BACKUP_PATH/libvirt-backup.env`: the first node publishes, a joining node
+pulls it. See [`push-config` / `pull-config`](#push-config--pull-config).
 
 ## `add-node`
 
@@ -42,11 +41,11 @@ sudo libvirt-backup-system add-node
   sudo env BACKUP_PATH=... KOPIA_PW=... python3 -m libvirt_backup_system install --kopia-password-env KOPIA_PW --acknowledge-password-loss
 ```
 
-The two leading spaces are intentional: pasting into a
-`HISTCONTROL=ignorespace`/`ignoreboth` shell (the Debian/Ubuntu bash
-default) or into fish keeps the token out of history. The joining host must
-mount the same NFS export (same server IP, path, fstab options) as the
-existing nodes — see [Mount consistency](joining-hosts.md#mount-consistency-across-nodes).
+The two leading spaces are intentional: pasting into bash
+(`HISTCONTROL=ignoreboth`, the Debian/Ubuntu default) or fish keeps the
+token out of history. The joining host must mount the same NFS export (same
+server IP, path, fstab options) — see
+[Mount consistency](joining-hosts.md#mount-consistency-across-nodes).
 
 ## `show-token`
 
@@ -58,22 +57,25 @@ sudo libvirt-backup-system show-token
 
 ## `push-config` / `pull-config`
 
-Config changes travel through the backup tree: push on the node you edited,
-pull on the others (`update-config` is a deprecated alias of `push-config`):
+**Config changes flow through the shared NFS tree with an explicit
+push/pull pair** — push on the node you edited, pull on every other node
+(`update-config` is a deprecated alias of `push-config`):
 
 ```sh
-sudoedit /etc/libvirt-backup-system/libvirt-backup.env    # on the edited node
-sudo libvirt-backup-system start && sudo libvirt-backup-system push-config
+# on the node you edited:
+sudoedit /etc/libvirt-backup-system/libvirt-backup.env
+sudo libvirt-backup-system start        # 1. apply locally
+sudo libvirt-backup-system push-config  # 2. publish for the cluster
 
-sudo libvirt-backup-system pull-config && sudo libvirt-backup-system start   # on every other node
+# on every other node:
+sudo libvirt-backup-system pull-config  # 3. take over the shared config
+sudo libvirt-backup-system start        # 4. apply locally
 ```
 
-**Run `push-config` after every config change** — skipping it leaves the
-shared config stale for pulls and future `add-node` joins. Nothing is
-live-synced: a node changes only when it pulls; `pull-config` preserves the
-local `HOST_ID` and `BACKUP_PATH`. `push-config` also re-records the shared
-fstab entry for the backup mount. Full details:
-[`push-config` / `pull-config`](config-sync.md).
+Skipping `push-config` leaves the shared config stale for pulls and future
+joins; nothing is live-synced. `pull-config` preserves the local `HOST_ID` and
+`BACKUP_PATH`; `push-config` also re-records the shared fstab entry. Full
+details: [`push-config` / `pull-config`](config-sync.md).
 
 ## `change-password`
 
@@ -88,10 +90,9 @@ echo -n "$PW" | sudo libvirt-backup-system change-password --new-kopia-password-
 sudo env NEW_KOPIA_PW=... libvirt-backup-system change-password --new-kopia-password-env=NEW_KOPIA_PW
 ```
 
-Run the same command on every host. Order does not matter; each host rotates
-its own local repo independently. `doctor` flags any host still holding the
-old value. See [Kopia password handling](kopia-password.md#password-rotation)
-for the full recovery procedure.
+Run the same command on every host, in any order; each host rotates its own
+repo independently, and `doctor` flags any host still holding the old value.
+See [Kopia password handling](kopia-password.md#password-rotation).
 
 Kopia rotation receives the resolved new value in Kopia's argv; avoid
 running it where untrusted users can inspect process arguments.
@@ -113,9 +114,9 @@ sudo libvirt-backup-system uninstall --purge-config --purge-state --purge-logs
 
 ## `check` / `preflight`
 
-Validates config, binaries, root policy, VM discovery, backup path writability,
-the password file, local Kopia repo connectivity, and free space. Run `start`
-once after setting a new `BACKUP_PATH`; `check` expects the repo.
+Validates config, binaries, root policy, VM discovery, backup path
+writability, the password file, local repo connectivity, and free space.
+Run `start` once after setting a new `BACKUP_PATH`; `check` expects the repo.
 
 ```sh
 sudo libvirt-backup-system check
@@ -162,10 +163,9 @@ repo operations.
 Use after `install`, after editing `/etc/libvirt-backup-system/libvirt-backup.env`,
 and to initialize an empty `BACKUP_PATH`; then run `check`.
 
-On the first node, `start` also publishes the shared config seed at
-`BACKUP_PATH/libvirt-backup.env` if none exists yet (it never overwrites an
-existing seed). Use [`push-config`](#push-config--pull-config) to push later edits to
-the seed for future joins.
+On the first node, `start` also publishes the shared config when none
+exists yet (never overwriting an existing one); later edits travel via
+[`push-config` / `pull-config`](#push-config--pull-config).
 
 ```sh
 sudo libvirt-backup-system start
